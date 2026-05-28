@@ -1,0 +1,74 @@
+# zkVerifyJS Non-Aggregation Pattern
+# Direct SDK lifecycle without Kurier aggregation tuple
+
+mode:
+  name: zkverifyjs-non-aggregation
+  uses_kurier: false
+  uses_zkverifyjs_sdk: true
+  uses_aggregation_tuple: false
+  uses_proof_aggregation_endpoint: false
+
+when_to_use:
+  - "Project wants direct zkVerifyJS SDK submission."
+  - "No Kurier REST relay is desired for this branch."
+  - "Business gate can use SDK tx lifecycle/status plus app-specific checks."
+
+hard_rules:
+  - "Do not call Kurier submit-proof."
+  - "Do not call Kurier job-status."
+  - "Do not call proof-aggregation endpoint."
+  - "Do not require aggregation tuple."
+  - "Persist SDK raw events and transactionResult."
+
+required_docs_before_coding:
+  - "docs/<case>/submission-mode.md = zkverifyjs-non-aggregation"
+  - "docs/<case>/verification-route.md explaining SDK status gate"
+  - "docs/<case>/schema-decisions.md"
+
+sdk_flow:
+  1_start_session: "zkVerifySession.start().zkVerify() or Custom(...)"
+  2_attach_account_or_wallet: "withAccount for backend or withWallet for browser wallet"
+  3_select_proof_type: "session.verify().<proofType>(config)"
+  4_execute: "execute({ proofData, domainId? })  # domainId is optional top-level param since zkverifyjs 3.0.0"
+  5_listen_events:
+    - includedInBlock
+    - finalized
+    - error
+  6_await_result: "transactionResult"
+  7_persist:
+    - raw_events
+    - transactionResult
+    - txHash
+    - blockHash
+    - statement_if_available
+
+status_schema:
+  proofId: string
+  status: "pending|included_in_block|finalized|failed|string"
+  rawStatus: string
+  txHash: "string|null"
+  blockHash: "string|null"
+  statusSource: zkverifyjs
+  proofReference: object
+
+business_gate:
+  required:
+    - "SDK finalized or selected lifecycle status"
+    - "business binding checks"
+    - "antiReplay enforcement"
+  note: "If target-chain contract action is required, define how SDK proof reference is consumed before coding."
+
+common_mistakes:
+  - "Mixing Kurier status parser with SDK events."
+  - "Waiting for aggregation receipt in a branch named non-aggregation."
+  - "Forgetting to persist raw transaction result."
+  - "Using backend seed phrase in frontend."
+
+validation_checklist:
+  - mode_locked_to_zkverifyjs_non_aggregation
+  - no_kurier_api_key_required
+  - no_kurier_routes_called
+  - SDK_events_persisted
+  - transactionResult_persisted
+  - no_aggregation_tuple_gate
+

@@ -1,0 +1,124 @@
+# Stage-Gated Execution Plan
+# Convert a case into implementation tasks
+
+goal: "Build a full browser-proving -> Kurier/zkVerify -> Base L2 business action flow."
+
+stages:
+  stage_0_5_decision_locks:
+    purpose: "Remove mode/schema/indexer ambiguity before coding."
+    tasks:
+      - ask_user_submission_mode
+      - ask_user_indexer_strategy
+      - choose_target_chain
+      - choose_proof_system
+      - define_business_action
+      - document_businessDomain_vs_aggregationDomainId
+    outputs:
+      - docs/<case>/submission-mode.md
+      - docs/<case>/verification-route.md
+      - docs/<case>/indexer-strategy.md
+      - docs/<case>/decision-locks.md
+      - docs/<case>/schema-decisions.md
+    gate:
+      - mode_explicitly_confirmed
+      - indexer_explicitly_confirmed
+      - domain_split_documented
+
+  stage_1_scaffold_env:
+    purpose: "Create allowed roots and env split."
+    roots:
+      - apps/web
+      - circuits
+      - contracts
+      - docs
+      - scripts
+    tasks:
+      - create_env_templates
+      - create_api_route_stubs
+      - verify_kurier_key_server_only
+      - configure_target_chain
+    gate:
+      - app_loads
+      - env_layers_split
+      - no_public_kurier_key
+
+  stage_2_circuit_proving:
+    purpose: "Fix circuit inputs and browser proof artifacts."
+    tasks:
+      - write_circuit_intake
+      - define_private_public_split
+      - build_browser_proving_flow
+      - locally_verify_proof
+    gate:
+      - witness_browser_only
+      - public_inputs_schema_fixed
+      - proof_artifacts_match_proofType
+
+  stage_3_statement_schema:
+    purpose: "Make statement construction and schemas single-source."
+    tasks:
+      - write_schema_registry
+      - implement_public_input_builder
+      - implement_statement_parity_script_if_needed
+      - define_precheck_snapshot
+    gate:
+      - public_input_order_fixed
+      - byte_order_fixed
+      - statement_parity_rule_documented
+
+  stage_4_kurier_api:
+    purpose: "Submit proof and map status through server routes."
+    tasks:
+      - implement_submit_proof_route
+      - implement_proof_status_route
+      - implement_proof_aggregation_route_if_needed
+      - persist_job_and_antireplay
+    gate:
+      - mode_specific_payload_only
+      - raw_status_persisted
+      - missing_tuple_diagnostics_available
+
+  stage_4_5_contract_parity:
+    purpose: "Match contract gate to selected route."
+    tasks:
+      - implement_business_contract_gate
+      - integrate_zkverify_verifier_contract
+      - enforce_antireplay
+      - emit_indexer_events
+    gate:
+      - selected_route_gate_matches_api_mode
+      - replay_rejected
+
+  stage_5_ui_state_machine:
+    purpose: "Expose proof lifecycle and block unsafe wallet prompts."
+    tasks:
+      - implement_status_ui
+      - implement_precheck_call
+      - gate_wallet_button
+      - show_diagnostics
+    gate:
+      - pending_verified_aggregated_visible
+      - wallet_button_disabled_until_gate
+
+  stage_6_indexer_runbook:
+    purpose: "Make history reads and operations reliable."
+    tasks:
+      - implement_selected_indexer
+      - add_lag_or_sync_state
+      - write_runbook
+      - write_troubleshooting_matrix
+    gate:
+      - no_full_chain_scan
+      - fallback_documented
+
+acceptance:
+  - browser_real_proof
+  - kurier_jobId_returned
+  - status_reaches_required_gate
+  - aggregation_tuple_complete_if_needed
+  - statement_equals_leaf_if_aggregation
+  - contract_precheck_true_if_aggregation
+  - business_action_success
+  - replay_fails
+  - indexer_reads_action
+

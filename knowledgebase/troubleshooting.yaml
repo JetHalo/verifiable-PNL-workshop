@@ -1,0 +1,121 @@
+# Troubleshooting Matrix
+# Symptom -> root cause -> shortest check
+
+priority_order:
+  1_submission_mode_route: "Check selected mode and routes first."
+  2_env_layer: "Check apps/web/.env.local vs contracts/.env."
+  3_statement_encoding: "Check public input order, encoding, byte order."
+  4_precheck_tuple: "Check aggregation tuple and verifier contract read."
+  5_wallet_tx: "Only debug wallet after above gates pass."
+
+errors:
+  optimistic_verify_failed:
+    symptom: "Kurier returns optimisticVerify: failed"
+    likely_root_causes:
+      - proof_vk_public_inputs_mismatch
+      - wrong_proofOptions
+      - stale_vkHash_after_circuit_rebuild
+    shortest_check: "Run local verifier and compare proofOptions."
+
+  proofOptions_required:
+    symptom: "proofOptions Required"
+    likely_root_causes:
+      - proofType_requires_options
+      - generic_payload_builder_dropped_options
+    shortest_check: "Open proof.systems.yaml and add required proofOptions."
+
+  invalid_submission_mode:
+    symptom: "INVALID_SUBMISSION_MODE_ERROR or route confusion"
+    likely_root_causes:
+      - mixed_direct_and_aggregation_payloads
+      - unrecorded_submission_mode
+    shortest_check: "Open docs/<case>/submission-mode.md and compare API builder."
+
+  no_aggregation_details:
+    symptom: "status has no aggregationDetails"
+    likely_root_causes:
+      - chainId_missing
+      - status_not_Aggregated
+      - using_non_aggregation_mode
+    shortest_check: "Print submit payload chainId and rawStatus."
+
+  statement_leaf_mismatch:
+    symptom: "statement != aggregationDetails.leaf"
+    likely_root_causes:
+      - public_input_order_wrong
+      - byte_order_wrong
+      - wrong_vkHash
+    shortest_check: "Run statement parity script and print public inputs bytes."
+
+  verifyProofAggregation_false:
+    symptom: "Base verifier precheck returns false"
+    likely_root_causes:
+      - wrong_aggregationDomainId
+      - wrong_aggregationId
+      - wrong_merkleProof_order
+      - wrong_leafCount_or_index
+      - aggregation_not_published
+    shortest_check: "Print exact contract args and check aggregationPublished."
+
+  root_not_known:
+    symptom: "root not known / root not allowed"
+    likely_root_causes:
+      - aggregation_root_not_published_to_destination_chain
+      - wrong_target_chain
+      - wrong_verifier_contract_address
+    shortest_check: "Check destination chainId, verifier address, aggregationPublished.destinationTxHash."
+
+  cors:
+    symptom: "Browser CORS error calling Kurier"
+    likely_root_causes:
+      - frontend_called_kurier_directly
+    shortest_check: "Search frontend for api.kurier.xyz or api-testnet.kurier.xyz."
+
+  rate_limit_429:
+    symptom: "HTTP 429"
+    likely_root_causes:
+      - polling_too_fast
+      - quota_exceeded
+    shortest_check: "Increase polling interval/backoff and inspect response headers."
+
+  x402_payment_required:
+    symptom: "HTTP 402 Payment Required"
+    likely_root_causes:
+      - called_x402_endpoint_without_PAYMENT_SIGNATURE
+      - omitted_api_key_path
+    shortest_check: "Use /submit-proof/{apiKey} or implement x402 payment."
+
+  eth_getLogs_range:
+    symptom: "eth_getLogs block range error"
+    likely_root_causes:
+      - scanning_too_many_blocks
+      - no_deployBlock
+      - no_lastSyncedBlock
+    shortest_check: "Use deployBlock and bounded ranges."
+
+  replay_succeeds:
+    symptom: "Same nullifier/nonce/orderId can finalize twice"
+    likely_root_causes:
+      - antiReplay_not_stored_on_contract
+      - contract_checks_after_action
+    shortest_check: "Inspect contract mapping and order of effects."
+
+  wallet_prompt_fails:
+    symptom: "User signs transaction that reverts immediately"
+    likely_root_causes:
+      - no_read_only_precheck
+      - wrong_chain
+      - stale_tuple
+    shortest_check: "Run precheck before enabling button."
+
+  api_key_leak:
+    symptom: "Kurier key appears in browser or repo"
+    likely_root_causes:
+      - NEXT_PUBLIC_KURIER_API_KEY
+      - real key committed
+    shortest_check: "rg -n \"KURIER_API_KEY|NEXT_PUBLIC_KURIER\" ."
+    immediate_response:
+      - rotate_key
+      - remove_public_env
+      - purge_logs_if_needed
+

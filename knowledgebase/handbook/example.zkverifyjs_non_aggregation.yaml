@@ -1,0 +1,55 @@
+# Example: zkVerifyJS Non-Aggregation
+# SDK lifecycle branch template
+
+metadata:
+  name: zkverifyjs_non_aggregation
+  submission_mode: zkverifyjs-non-aggregation
+  recommended_for: "cases that want direct SDK control instead of Kurier REST relay"
+
+measurement:
+  one_sentence: "The app verifies that a proof submitted through zkVerifyJS reached the selected SDK lifecycle status and satisfies the app-specific business gate."
+  commodity_type: cryptographic_attestation
+  verification_method: "zkVerifyJS events + transactionResult"
+
+flow:
+  1_session:
+    - start_zkverify_session
+    - attach_wallet_or_backend_account
+  2_submit:
+    - select_proof_type
+    - execute_verify
+  3_events:
+    - includedInBlock
+    - finalized
+    - error
+  4_persist:
+    - raw_events
+    - transactionResult
+    - proofReference
+  5_business_gate:
+    - apply_sdk_status_gate
+    - enforce_antireplay
+
+forbidden:
+  - Kurier_API_key
+  - Kurier_submit_proof
+  - Kurier_job_status
+  - proof_aggregation_endpoint
+  - aggregation_tuple_gate
+
+status_output:
+  proofId: string
+  status: "pending|included_in_block|finalized|failed|string"
+  rawStatus: string
+  statusSource: zkverifyjs
+  txHash: "string|null"
+  blockHash: "string|null"
+  proofReference: object
+
+acceptance:
+  - no_kurier_routes_called
+  - SDK_events_persisted
+  - transactionResult_persisted
+  - business_gate_documented
+  - replay_rejected
+

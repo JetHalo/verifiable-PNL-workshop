@@ -1,0 +1,100 @@
+# Security Boundaries
+# Browser proving, server secrets, replay protection, and wallet gating
+
+private_data_boundary:
+  rule: "Private data stays in browser/user client."
+  private_examples:
+    - witness
+    - raw_credentials
+    - raw_activity_data
+    - private_salt
+    - identity_secret
+  allowed_to_server:
+    - proof
+    - publicSignals
+    - vk_or_vkHash
+    - business_bindings
+    - antiReplay_token
+
+server_secret_boundary:
+  kurier_key:
+    env_name: KURIER_API_KEY
+    scope: server_only
+    forbidden_env_names:
+      - NEXT_PUBLIC_KURIER_API_KEY
+      - PUBLIC_KURIER_API_KEY
+    leak_response:
+      - rotate_key
+      - invalidate_old_jobs_if_needed
+      - audit_logs
+
+binding_boundary:
+  must_validate_server_side:
+    businessDomain: "expected configured business domain"
+    appId: "expected configured app id"
+    userAddr: "valid EVM address"
+    chainId: "expected destination chain"
+    timestamp: "inside allowed freshness window"
+    antiReplay: "present and not previously consumed"
+  must_bind_in_circuit_or_statement:
+    - businessDomain
+    - appId
+    - userAddr
+    - chainId
+    - timestamp
+    - antiReplay
+
+anti_replay:
+  options:
+    nullifier:
+      best_for: "privacy-preserving one-time eligibility"
+      contract_storage: "mapping(bytes32 => bool) nullifierUsed"
+    nonce:
+      best_for: "per-user ordered or random actions"
+      contract_storage: "mapping(address => mapping(bytes32 => bool)) nonceUsed"
+    orderId:
+      best_for: "commerce or escrow actions"
+      contract_storage: "mapping(bytes32 => bool) orderFinalized"
+  double_enforcement:
+    server: "prevents wasteful duplicate Kurier jobs"
+    contract: "prevents replay even if server is bypassed"
+
+wallet_gate:
+  rule: "Never prompt wallet for a transaction expected to fail selected route gate."
+  aggregation_mode_requires:
+    - aggregationDetails_present
+    - statement_equals_leaf
+    - verifyProofAggregation_true
+  direct_mode_requires:
+    - direct_mode_contract_gate_defined
+    - route_specific_status_final
+  sdk_non_aggregation_requires:
+    - zkverifyjs_status_included_or_finalized
+    - business_gate_defined
+
+logging:
+  do_log:
+    - jobId
+    - proofId
+    - rawStatus
+    - availableKeys
+    - txHash
+    - blockHash
+    - aggregationId
+    - statement
+    - leaf
+  do_not_log:
+    - witness
+    - raw private input
+    - API key
+    - wallet mnemonic
+    - seed phrase
+
+validation_checklist:
+  - no_private_data_in_api_request
+  - no_kurier_key_in_frontend
+  - bindings_validated_server_side
+  - anti_replay_enforced_server_and_contract
+  - wallet_prompt_after_precheck_only
+  - logs_exclude_secrets
+

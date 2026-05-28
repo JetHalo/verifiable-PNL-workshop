@@ -1,0 +1,51 @@
+# Example: Kurier Direct
+# Direct mode branch template
+
+metadata:
+  name: kurier_direct
+  submission_mode: kurier-direct
+  recommended_for: "cases where Kurier direct destination-chain route is explicitly required"
+
+measurement:
+  one_sentence: "The app verifies that a proof submitted through Kurier direct mode reached the documented direct target-chain gate for a user-bound business claim."
+  commodity_type: cryptographic_attestation
+  verification_method: "Kurier direct status + direct target-chain gate"
+
+flow:
+  1_browser:
+    - generate_witness
+    - generate_proof
+  2_backend_submit:
+    - validate_bindings
+    - build_direct_payload
+    - submit_to_kurier_with_submissionMode_direct
+  3_kurier:
+    - direct_status_progress
+    - persist_tx_or_reference
+  4_contract_or_business_gate:
+    - apply_direct_gate
+    - execute_action
+
+forbidden:
+  - proof_aggregation_route
+  - aggregationDetails_required
+  - verifyProofAggregation_as_default_gate
+  - aggregation_kurier_payload_builder
+
+required_docs_before_code:
+  - submission-mode.md
+  - verification-route.md
+  - direct-gate-contract.md
+
+acceptance:
+  - submissionMode_direct_used
+  - no_aggregation_tuple_required
+  - direct_gate_passes
+  - business_action_success
+  - replay_rejected
+
+open_questions:
+  - "Which direct target-chain verifier contract/API is used?"
+  - "Which raw status is sufficient for business gate?"
+  - "Which proof types are supported by direct route on selected network?"
+

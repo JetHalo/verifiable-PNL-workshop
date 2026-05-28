@@ -1,0 +1,211 @@
+# Supported Proof Systems
+# Proof types, required proofOptions, limits, and artifact shapes
+# Refreshed 2026-05-28 against docs.zkverify.io/architecture/supported_proofs
+# and live api.kurier.xyz / api-testnet.kurier.xyz /status
+
+kurier_supported_mainnet_checked_2026_05_28:
+  # Live response from https://api.kurier.xyz/api/v1/status
+  proofs:
+    - groth16
+    - plonky2
+    - risc0
+    - fflonk
+    - ultraplonk
+    - sp1
+    - ultrahonk
+  note: "tee is in docs.zkverify.io/architecture/supported_proofs but NOT yet in Kurier mainnet supportedProofs."
+
+kurier_supported_testnet_checked_2026_05_28:
+  # Live response from https://api-testnet.kurier.xyz/api/v1/status
+  proofs:
+    - groth16
+    - plonky2
+    - risc0
+    - fflonk
+    - ultraplonk
+    - sp1
+    - ultrahonk
+    - ezkl
+  note: "tee is in docs.zkverify.io/architecture/supported_proofs but NOT yet in Kurier testnet supportedProofs."
+
+openapi_enum:
+  # Kurier OpenAPI still advertises tee as accepted; backend may reject at runtime.
+  - groth16
+  - plonky2
+  - risc0
+  - fflonk
+  - ultraplonk
+  - sp1
+  - ultrahonk
+  - ezkl
+  - tee
+
+docs_zkverify_io_full_list_2026_05_28:
+  ezkl:
+    notes: "Reusable Verifier only (v0.1.0), BN254 (Curve), BDFG21 (batch opening scheme)"
+  fflonk:
+    notes: "BN128"
+  groth16:
+    curves: [BLS12-381, BN128, BN254]
+  noir_ultrahonk:
+    requires: "Noir >= v1.0.0-beta.14, bb >= v3.0.0 and bb.js >= v3.0.0"
+  noir_ultraplonk:
+    requires: "Noir >= v0.31.0, bb <= v0.76.4"
+  risc0:
+    versions: [v2.1, v2.2, v2.3]
+    note: "zkverifyjs SDK enum also exposes V3_0; docs page does not list it as of 2026-05-28 — treat V3_0 as unverified for Kurier route."
+  plonky2:
+    hash_functions: [Keccak256, Poseidon]
+  sp1:
+    versions: "v5.x"
+  tee:
+    variants: [Intel TDX, AWS Nitro]
+    note: "AWS Nitro listed in docs but zkverifyjs (v3.1.0) only exposes TeeVariant.Intel."
+
+proof_options:
+  groth16:
+    proofOptions:
+      library:
+        examples: [snarkjs, arkworks, gnark]
+      curve:
+        examples: [bn128, bn254, bls12-381]
+    proofData:
+      proof: "object"
+      publicSignals: "array|object"
+      vk: "object|string vkHash"
+    public_input_limit_docs:
+      mainnet: 64
+      testnet: 64
+
+  fflonk:
+    proofOptions:
+      curve:
+        examples: [bn128]
+    public_input_limit_docs:
+      mainnet: 1
+      testnet: 1
+
+  plonky2:
+    proofOptions:
+      hashFunction:
+        examples: [Poseidon, Keccak256]
+    limits_docs:
+      max_public_inputs: 64
+      max_proof_size: "256 KiB"
+      max_vk_size: "50 KB"
+
+  risc0:
+    proofOptions:
+      version:
+        examples: [V2_1, V2_2, V2_3, V3_0]
+        note: "V3_0 exists in zkverifyjs enum; not on docs page as of 2026-05-28."
+    proofData:
+      proof: "0x/cbor-compatible proof string"
+      publicSignals: "public journal / pub_inputs"
+      vk: "image_id or vkHash"
+    limits_docs:
+      max_public_inputs_size: "2052 bytes, 2048 bytes user input"
+      format: cbor
+
+  sp1:
+    proofOptions: {}
+    proofData:
+      proof: "SP1 zkv proof"
+      publicSignals: "public values"
+      vk: "image_id or vkHash"
+    limits_docs:
+      max_public_inputs_size: "2048 bytes"
+      supported_versions: "v5.x"
+
+  ultrahonk:
+    proofOptions:
+      version:
+        # NEW REQUIRED FIELD as of zkverifyjs 3.1.0
+        examples: [V0_84, V3_0, Legacy]
+        required: true
+        default_runtime_v1_6_0: V0_84
+        default_runtime_v1_6_1_plus: Legacy
+        note: "Required since zkverifyjs 3.1.0. Workshop using bb 0.84.0 anchor -> use V0_84 explicitly."
+      variant:
+        examples: [Plain, ZK]
+        required: true_since_2_4_0
+    proofData:
+      proof: "hex string"
+      publicSignals: "hex public inputs array/string"
+      vk: "hex vk or vkHash"
+    docs:
+      noir_version: ">= v1.0.0-beta.14"
+      bb_version: ">= v3.0.0"
+      bbjs_version: ">= v3.0.0"
+      hash: Keccak256
+      public_input_limit: 32
+
+  ultraplonk:
+    proofOptions:
+      numberOfPublicInputs:
+        type: number
+        required: true
+    proofData:
+      proof: "base64 proof or formatted proof"
+      vk: "base64 vk or vkHash"
+    docs:
+      noir_version: ">= v0.31.0"
+      bbup: "<= v0.76.4"
+      public_input_limit: 32
+
+  ezkl:
+    proofOptions: {}
+    docs:
+      reusable_verifier_version: "v0.1.0"
+      curve: BN254
+      batch_opening_scheme: BDFG21
+    note: "Supported in zkVerify/Kurier docs (testnet only as of 2026-05-28). Check current /status before use."
+
+  tee:
+    proofOptions:
+      variant:
+        examples: [Intel]
+        required: true_since_2_4_0
+        sdk_only: [Intel]
+        docs_advertised: [Intel TDX, AWS Nitro]
+        runtime_requirement: "zkVerify runtime v1.5.0+"
+    proofData:
+      proof: "0x-prefixed hex"
+      publicSignals: "none"
+    note: "OpenAPI advertises tee; Kurier /status mainnet+testnet do NOT yet list tee. Treat as docs-only as of 2026-05-28."
+
+selection_guidance:
+  noir_ultrahonk:
+    use_when:
+      - "new tutorial circuit"
+      - "browser proving with Noir"
+      - "Keccak-friendly public input hashing"
+    caution:
+      - "version field required as of zkverifyjs 3.1.0; default is Legacy on runtime v1.6.1+"
+      - "variant required since 2.4.0"
+      - "VerifyTrade workshop anchor is bb 0.84.0 -> use version: V0_84"
+
+  noir_ultraplonk:
+    use_when:
+      - "existing Noir UltraPlonk artifacts"
+      - "public input count fixed and documented"
+    caution:
+      - "must set numberOfPublicInputs"
+
+  groth16:
+    use_when:
+      - "Circom/snarkjs compatibility"
+      - "simple examples"
+    caution:
+      - "curve/library must match vk/proof"
+      - "zkverifyjs 3.0.0 dropped snarkjs as transitive dep; add it explicitly if using Library.snarkjs"
+
+validation_checklist:
+  - proofType_in_current_status_endpoint
+  - proofOptions_match_proofType
+  - vk_matches_circuit_build
+  - public_input_count_within_limit
+  - artifact_encoding_matches_route
+  - local_verify_passes_before_kurier
+  - ultrahonk_version_set_explicitly_since_3_1_0
+  - tee_variant_set_explicitly_since_2_4_0

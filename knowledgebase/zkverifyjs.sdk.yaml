@@ -1,0 +1,229 @@
+# zkVerifyJS SDK Reference
+# Non-Kurier SDK path for direct interaction with zkVerify
+# Refreshed 2026-05-28 against zkverifyjs v3.1.0 (npm latest)
+# Source: https://raw.githubusercontent.com/zkVerify/zkverifyjs/main/README.md
+# Release notes: https://github.com/zkVerify/zkverifyjs/releases
+
+overview:
+  package: zkverifyjs
+  latest_version_pulled: "3.1.0"
+  latest_pull_date: "2026-05-28"
+  purpose: "TypeScript SDK for sending proofs to zkVerify, listening to transaction events, waiting for finalization, registering verification keys, and managing aggregation domains."
+  use_when:
+    - submission_mode_is_zkverifyjs_non_aggregation
+    - app_wants_direct_sdk_lifecycle
+    - Kurier_is_not_selected_for_branch
+  do_not_use_when:
+    - branch_locked_to_aggregation_kurier
+    - branch_locked_to_kurier_direct
+
+runtime_requirements:
+  engines_node: ">= 24"
+  reason: "zkverifyjs 3.0.0 raised engines.node from >=18 to >=24 (Node 18 EOL April 2025)."
+  if_using_snarkjs:
+    rule: "Add snarkjs as a direct dep in your package.json. zkverifyjs 3.0.0 removed it from transitive deps."
+
+installation:
+  npm: "npm install zkverifyjs"
+  dotenv: "npm install dotenv"
+  optional_for_groth16: "npm install snarkjs"
+
+session_modes:
+  read_only:
+    example: "await zkVerifySession.start().zkVerify()"
+    can_send_transactions: false
+  read_only_custom:
+    example: "await zkVerifySession.start().Custom({ websocket, rpc, network })"
+  backend_single_account:
+    example: "await zkVerifySession.start().zkVerify().withAccount(SEED_PHRASE)"
+    can_send_transactions: true
+    secret_boundary: "seed phrase must be server-only"
+    seed_constraints:
+      - "BIP39 word count enforced (12/15/18/21/24) since 3.0.0"
+      - "Substrate dev SURIs like //Alice rejected on .zkVerify() and Volta; allowed on .Custom()"
+  backend_multi_account:
+    example: "await zkVerifySession.start().zkVerify().withAccounts([SEED_1, SEED_2, SEED_3])"
+    note: "Use addAccount/removeAccount/addDerivedAccounts/getAccountInfo to manage runtime."
+  frontend_wallet:
+    example: "await zkVerifySession.start().zkVerify().withWallet({ source, accountAddress })"
+    can_send_transactions: true
+    note: "Uses browser wallet context (window.injectedWeb3)."
+  custom_network:
+    fields:
+      websocket: string
+      rpc: string
+      network: string  # optional label
+    new_options_3_0_0:
+      wsProvider:
+        autoConnectMs: "number | false (default 2500)"
+        timeout: number
+        note: "autoConnectMs: false disables auto-reconnect; pair with session.provider.on('disconnected', ...)."
+      syncTimeoutMs:
+        default: 300000
+        note: "Throws if node hasn't finished syncing within this many ms during session start."
+
+verify_flow:
+  fluent_pattern:
+    steps:
+      - "session.verify()"
+      - "select proof type and config (e.g. .ultrahonk({version, variant}))"
+      - "optional .nonce(n)"
+      - "optional .withRegisteredVk()"
+      - "execute({ proofData, domainId? })"
+      - "listen to events"
+      - "await transactionResult"
+  events:
+    - includedInBlock
+    - finalized
+    - error
+    - ErrorEvent
+  transactionResult:
+    meaning: "Final transaction details after finalization."
+  domainId_in_execute:
+    location: "top-level of execute() args alongside proofData"
+    optional: true
+    example: "execute({ proofData: {vk, proof, publicSignals}, domainId: 42 })"
+
+proof_type_examples:
+  groth16:
+    config:
+      library: "Library.snarkjs | Library.arkworks | Library.gnark"
+      curve: "CurveType.bn128 | CurveType.bn254 | CurveType.bls12381"
+  ultraplonk:
+    config:
+      numberOfPublicInputs: number
+  ultrahonk:
+    config:
+      version: "UltrahonkVersion.V0_84 | UltrahonkVersion.V3_0 | UltrahonkVersion.Legacy"
+      variant: "UltrahonkVariant.Plain | UltrahonkVariant.ZK"
+    required_since:
+      version: "3.1.0 (defaults to Legacy on runtime v1.6.1+, V0_84 on v1.6.0)"
+      variant: "2.4.0"
+    workshop_recommendation: "version: V0_84 (matches VerifyTrade bb 0.84.0 anchor)"
+  risc0:
+    config:
+      version: "Risc0Version.V2_1 | V2_2 | V2_3 | V3_0"
+      note: "V3_0 in SDK enum; docs.zkverify.io supported_proofs only lists v2.1, v2.2, v2.3 as of 2026-05-28."
+  plonky2:
+    config:
+      hashFunction: "Plonky2HashFunction.Poseidon | Plonky2HashFunction.Keccak256"
+  sp1:
+    config: {}
+  ezkl:
+    config: {}
+  tee:
+    config:
+      variant: "TeeVariant.Intel"
+    required_since:
+      variant: "2.4.0 (defaults to Intel on runtime v1.6.0+ with warning)"
+    sdk_only_variants: [Intel]
+    docs_only_variants: [Intel_TDX, AWS_Nitro]
+
+batch_verify:
+  signature: "session.batchVerify().<proofType>(config).withRegisteredVk?.nonce?.execute([{proofData, domainId}, ...])"
+  rule: "All proofs in a batch must be same ProofType and same config."
+  failure_semantics: "If any proof fails, the whole batch fails."
+
+optimistic_verify:
+  methods:
+    - optimisticVerify
+    - batchOptimisticVerify
+  use_when: "Want optimistic verification result before final on-chain inclusion."
+
+register_verification_key:
+  signature: "session.registerVerificationKey().<proofType>(config).execute(vk)"
+  returns: "VKRegistrationTransactionInfo (contains statementHash)"
+  later_use: "Set .withRegisteredVk() on subsequent verify calls and pass vk = vkTransactionInfo.statementHash"
+
+aggregation_helpers:
+  waitForAggregationReceipt:
+    use_when: "SDK aggregation is selected."
+    note: "Not used as gate in zkverifyjs-non-aggregation mode unless branch explicitly changes mode."
+  getAggregateStatementPath:
+    inputs:
+      - blockHash
+      - domainId
+      - aggregationId
+      - statement
+    output: "AggregateStatementPathResult"
+    bug_fixed_3_0_0: ".toHuman() -> .toJSON() — was returning NaN once numberOfLeaves > 1000."
+  aggregate:
+    signature: "session.aggregate(...)"
+    note: "Publish aggregation; available v2.0.0+"
+
+domain_management:
+  available_since: "v1.x"
+  methods:
+    registerDomain:
+      note: "queueSize: 0 throws; default queueSize only applies when arg is omitted (clarified in 3.0.0 README/JSDoc)."
+    holdDomain: {}
+    unregisterDomain: {}
+    addDomainSubmitters:
+      since: "v1.3.0+"
+    removeDomainSubmitters:
+      since: "v1.3.0+"
+  workshop_relevance: "Lets the workshop register its own aggregationDomainId instead of borrowing a public one."
+
+utility_methods:
+  - getVkHash
+  - format
+  - formatVk
+  - createSubmitProofExtrinsic
+  - createExtrinsicHex
+  - createExtrinsicFromHex
+  - estimateCost
+  - getAccountInfo
+  - getAccount
+  - addAccount
+  - addAccounts
+  - addDerivedAccounts
+  - removeAccount
+  - subscribe
+  - unsubscribe
+
+raw_access:
+  - "session.api  # polkadot ApiPromise"
+  - "session.provider  # polkadot WsProvider"
+
+non_aggregation_status_gate:
+  required:
+    - includedInBlock_or_finalized_event_captured
+    - transactionResult_persisted
+    - proof_reference_fields_saved
+  forbidden:
+    - "calling /proof-aggregation endpoint"
+    - "requiring aggregation tuple"
+    - "using Kurier status parser"
+
+security:
+  backend_seed_phrase:
+    rule: "If withAccount is used on backend, seed phrase is server-only and never logged."
+    new_3_0_0_validation:
+      - "Empty/whitespace seed throws clear message."
+      - "Substrate dev SURIs (//Alice etc.) rejected on Volta/mainnet; allowed only on .Custom()."
+      - "BIP39 word count 12/15/18/21/24 enforced."
+      - "32-byte hex seeds and mnemonic-with-derivation still work."
+  frontend_wallet:
+    rule: "If withWallet is used, user must approve transaction in wallet."
+  witness:
+    rule: "Still browser-only unless case explicitly uses server-owned proof generation for non-private system proofs."
+
+breaking_changes_2_3_to_3_1:
+  - "engines.node >= 18 -> >= 24 (3.0.0)"
+  - "web3, snarkjs, @types/snarkjs, @types/web3 removed from package.json — add explicitly if consumer relied on transitive (3.0.0)"
+  - "validateProofTypeOptions (internal but exported) now returns ProofOptions instead of void (3.0.0)"
+  - "bindMethods helper removed from utils/helpers exports (3.0.0)"
+  - "fastify dev dep 4.x -> 5.x (3.0.0; test setup only)"
+  - "Ultrahonk version field required (3.1.0; defaults to Legacy on runtime v1.6.1+ for backwards compatibility)"
+
+validation_checklist:
+  - submission_mode_locked_to_zkverifyjs_non_aggregation
+  - no_kurier_payloads_used
+  - no_proof_aggregation_gate
+  - events_persist_included_finalized
+  - transactionResult_persisted
+  - business_gate_defined
+  - node_version_24_or_higher
+  - ultrahonk_calls_include_version_field
+  - tee_calls_include_variant_field
+  - snarkjs_added_as_direct_dep_if_used

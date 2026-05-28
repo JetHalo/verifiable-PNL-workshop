@@ -1,0 +1,258 @@
+# Kurier API Specification
+# REST endpoints, payload contracts, environments, and service versions
+
+overview:
+  what: "Kurier is a REST API relay for submitting and verifying ZK proofs on zkVerify or supported destination chains."
+  role:
+    - register_verification_keys
+    - accept_proof_submission
+    - optimistic_verify
+    - relay_to_zkverify
+    - expose_job_status
+    - expose_aggregation_details_when_chainId_provided
+  key_boundary: "API key must stay server-side."
+
+environments:
+  mainnet:
+    api_base_url: "https://api.kurier.xyz/api/v1"
+    docs: "https://kurier.xyz/docs/"
+    swagger: "https://api.kurier.xyz/docs"
+    swagger_json: "https://api.kurier.xyz/docs/json"
+    version_checked_2026_05_28:
+      apiVersion: "v0.1.0"
+      serviceVersion: "v1.30.0"      # was v1.26.1 on 2026-04-23
+      runtimeSpecVersion: 10602        # new field exposed by Kurier /version since v1.30.0
+      environment: production
+      status: ok
+    supported_destination_chains:
+      Base:
+        chain_id: 8453
+      Horizen_Mainnet:
+        chain_id: 26514
+
+  testnet:
+    api_base_url: "https://api-testnet.kurier.xyz/api/v1"
+    docs: "https://testnet.kurier.xyz/docs/"
+    swagger: "https://api-testnet.kurier.xyz/docs"
+    swagger_json: "https://api-testnet.kurier.xyz/docs/json"
+    version_checked_2026_05_28:
+      apiVersion: "v0.1.0"
+      serviceVersion: "v1.30.0"      # was v1.26.1 on 2026-04-23
+      runtimeSpecVersion: 10602        # new field exposed by Kurier /version since v1.30.0
+      environment: staging
+      status: ok
+    attestation_destination_chains:
+      Sepolia:
+        chain_id: 11155111
+      Arbitrum_Sepolia:
+        chain_id: 421614
+      Base_Sepolia:
+        chain_id: 84532
+      Optimism_Sepolia:
+        chain_id: 11155420
+      EDU_Chain_Testnet:
+        chain_id: 656476
+      Horizen_Testnet:
+        chain_id: 2651420
+    direct_destination_chains:
+      Base_Sepolia:
+        chain_id: 84532
+
+endpoints:
+  version:
+    method: GET
+    path: "/version"
+    auth: none
+    response:
+      apiVersion: string
+      serviceVersion: string
+      environment: string
+      status: ok
+
+  status:
+    method: GET
+    path: "/status"
+    auth: none
+    response:
+      chainStatus:
+        latestBlockNumber: number
+        latestBlockTimestamp: number
+      supportedProofs: "string[]"
+      averageOptimisticVerificationTimeSeconds: "number|null"
+
+  register_vk:
+    method: POST
+    path: "/register-vk/{apiKey}"
+    x402_path: "/register-vk/"
+    auth: "api key in path, or x402 PAYMENT-SIGNATURE for x402 path"
+    request:
+      required:
+        - proofType
+        - vk
+      optional:
+        - proofOptions
+      schema:
+        proofType: "groth16|plonky2|risc0|fflonk|ultraplonk|sp1|ultrahonk|ezkl|tee"
+        proofOptions: object
+        vk: "object|string"
+    response_200:
+      vkHash: string
+    response_400:
+      error: string
+      code: string
+      message: string
+      meta: object
+
+  submit_proof:
+    method: POST
+    path: "/submit-proof/{apiKey}"
+    x402_path: "/submit-proof/"
+    auth: "api key in path, or x402 PAYMENT-SIGNATURE for x402 path"
+    request:
+      required:
+        - proofData
+        - proofType
+        - vkRegistered
+      optional:
+        - proofOptions
+        - chainId
+        - submissionMode
+      schema:
+        proofData:
+          required:
+            - proof
+            - vk
+          optional:
+            - publicSignals
+          fields:
+            proof: "object|string"
+            publicSignals: "object|array|string"
+            vk: "object|string"
+        proofType: "groth16|plonky2|risc0|fflonk|ultraplonk|sp1|ultrahonk|ezkl|tee"
+        proofOptions: object
+        chainId: number
+        vkRegistered: boolean
+        submissionMode: "attestation|direct"
+    response_200:
+      jobId: string
+      optimisticVerify: "success|failed"
+      error: "string|null"
+    response_errors:
+      400: "invalid/missing input"
+      402: "x402 payment required"
+      422: "validation failed"
+      429: "rate limit exceeded"
+      500: "internal server error"
+
+  job_status:
+    method: GET
+    path: "/job-status/{apiKey}/{jobId}"
+    auth: "api key in path"
+    response_200_fields:
+      jobId: string
+      status: string
+      proofType: "string|null"
+      chainId: "integer|null"
+      createdAt: date-time
+      updatedAt: date-time
+      proofOptions: "object|null"
+      txHash: "string|null"
+      txExplorerUrl: "string|null"
+      blockHash: "string|null"
+      blockExplorerUrl: "string|null"
+      aggregationId: "integer|null"
+      statement: "string|null"
+      transactionDetails: "object|null"
+      errorDetails: "object|null"
+      aggregationDetails:
+        receipt: string
+        receiptBlockHash: string
+        root: string
+        leaf: string
+        leafIndex: integer
+        numberOfLeaves: integer
+        merkleProof: "string[]"
+      aggregationPublished:
+        destinationChainId: integer
+        destinationTxHash: string
+        createdAt: date-time
+
+  jobs:
+    method: GET
+    path: "/jobs"
+    purpose: "Paginated job management endpoint with filters."
+    filters:
+      - userId
+      - label
+      - createdAfter
+      - createdBefore
+      - page
+      - pageSize
+      - countOnly
+      - status
+      - sortBy
+      - sortOrder
+    note: "Use carefully; do not expose broad job listing to frontend."
+
+payload_examples:
+  groth16_registered_no_aggregation:
+    proofType: groth16
+    vkRegistered: true
+    proofOptions:
+      library: snarkjs
+      curve: bn128
+    proofData:
+      proof: "<proof object>"
+      publicSignals: "<public inputs>"
+      vk: "<vkHash>"
+
+  groth16_registered_aggregation:
+    proofType: groth16
+    vkRegistered: true
+    chainId: 84532
+    proofOptions:
+      library: snarkjs
+      curve: bn128
+    proofData:
+      proof: "<proof object>"
+      publicSignals: "<public inputs>"
+      vk: "<vkHash>"
+
+  ultrahonk_registered:
+    proofType: ultrahonk
+    vkRegistered: true
+    proofData:
+      proof: "<hex proof>"
+      publicSignals: "<hex public inputs array>"
+      vk: "<vkHash>"
+
+integration_rules:
+  server_route_only:
+    rule: "Frontend must call project API route, not Kurier directly."
+    reason:
+      - prevent_api_key_leak
+      - normalize_errors
+      - enforce_bindings
+      - persist_anti_replay
+
+  mode_specific_payloads:
+    rule: "Build separate payload builders per submission mode."
+    forbidden:
+      - "single generic payload with optional direct/aggregation branches"
+      - "submissionMode direct with aggregation tuple gate"
+      - "chainId omitted for aggregation route"
+
+common_errors:
+  proofOptions_required:
+    cause: "Proof type requires options but request omitted them."
+    fix: "Load proof.systems.yaml and add proofOptions."
+  optimistic_verify_failed:
+    cause: "proof/vk/publicInputs mismatch or wrong proofOptions."
+    fix: "Run local verifier and regenerate artifacts."
+  cors:
+    cause: "Browser called Kurier directly."
+    fix: "Use Next.js API route."
+  status_missing_tuple:
+    cause: "No chainId or not yet aggregated."
+    fix: "Check submit payload and wait for Aggregated."
+

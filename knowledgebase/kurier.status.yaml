@@ -1,0 +1,159 @@
+# Kurier Job Status Reference
+# Raw statuses, normalized UI states, and response parsing
+
+raw_statuses:
+  Failed:
+    description: "Proof processing failed."
+    terminal: true
+    normalized: failed
+  Queued:
+    description: "Proof accepted and waiting for processing."
+    terminal: false
+    normalized: pending
+  Valid:
+    description: "Proof passed optimistic verification."
+    terminal: false
+    normalized: pending
+  Submitted:
+    description: "Proof submitted to blockchain/mempool."
+    terminal: false
+    normalized: pending
+  IncludedInBlock:
+    description: "Proof transaction included in a block."
+    terminal: false
+    normalized: pending
+  Finalized:
+    description: "Proof transaction finalized on-chain."
+    terminal: true
+    normalized: verified
+  AggregationPending:
+    description: "Proof ready for aggregation; only supported when chainId is provided."
+    terminal: false
+    normalized: pending
+  Aggregated:
+    description: "Proof successfully aggregated and published; only supported when chainId is provided."
+    terminal: true
+    normalized: aggregated
+  AggregationPublished:
+    description: "Aggregation published to destination chain contract."
+    terminal: true
+    normalized: aggregated
+
+normalized_statuses:
+  pending:
+    raw:
+      - Queued
+      - Valid
+      - Submitted
+      - IncludedInBlock
+      - AggregationPending
+    ui_behavior:
+      - "show progress"
+      - "disable duplicate submit unless user cancels"
+      - "do not prompt wallet for business transaction"
+  verified:
+    raw:
+      - Finalized
+    ui_behavior:
+      - "show proof finalized on zkVerify"
+      - "if aggregation mode, continue waiting for aggregation"
+      - "if non-aggregation route, apply route-specific gate"
+  aggregated:
+    raw:
+      - Aggregated
+      - AggregationPublished
+    ui_behavior:
+      - "fetch/confirm aggregation tuple"
+      - "run statement==leaf"
+      - "run contract precheck"
+  failed:
+    raw:
+      - Failed
+    ui_behavior:
+      - "show errorDetails"
+      - "allow retry with new proof/job if appropriate"
+
+job_status_response:
+  core_fields:
+    - jobId
+    - status
+    - proofType
+    - chainId
+    - createdAt
+    - updatedAt
+    - proofOptions
+    - txHash
+    - txExplorerUrl
+    - blockHash
+    - blockExplorerUrl
+    - aggregationId
+    - statement
+    - transactionDetails
+    - errorDetails
+    - aggregationDetails
+    - aggregationPublished
+  aggregationDetails_fields:
+    - receipt
+    - receiptBlockHash
+    - root
+    - leaf
+    - leafIndex
+    - numberOfLeaves
+    - merkleProof
+  aggregationPublished_fields:
+    - destinationChainId
+    - destinationTxHash
+    - createdAt
+
+parser_rules:
+  tolerant_parsing:
+    rule: "Persist rawStatus, availableKeys, and raw payload for diagnostics."
+    missing_key_response:
+      error: "missing_required_status_keys"
+      include:
+        - rawStatus
+        - availableKeys
+        - source
+        - missingKeys
+  aggregation_mode_required_keys:
+    - aggregationId
+    - statement
+    - aggregationDetails.leaf
+    - aggregationDetails.leafIndex
+    - aggregationDetails.numberOfLeaves
+    - aggregationDetails.merkleProof
+  failed_status:
+    rule: "Return errorDetails if available; do not collapse to generic 500."
+
+gate_contract:
+  aggregation_mode:
+    raw_status_needed: "Aggregated or AggregationPublished"
+    but_not_sufficient: true
+    additional_required:
+      - aggregation_tuple_complete
+      - statement_equals_leaf
+      - verifyProofAggregation_true
+  no_aggregation:
+    raw_status_needed: "Finalized"
+    additional_required:
+      - mode_specific_business_gate
+
+polling_guidance:
+  default_interval_seconds: 5
+  aggregation_interval_seconds: 20
+  backoff:
+    on_429: "exponential backoff and surface rate limit"
+    on_5xx: "retry with capped backoff"
+    on_failed: "stop polling"
+  do_not:
+    - "poll from browser directly against Kurier"
+    - "hide raw status from debugging view"
+    - "treat IncludedInBlock as final"
+
+common_mistakes:
+  - "Treating Finalized as Aggregated."
+  - "Ignoring AggregationPublished."
+  - "Crashing when aggregationDetails is null."
+  - "Returning only boolean success and losing rawStatus."
+  - "Prompting wallet on Aggregated before contract precheck."
+

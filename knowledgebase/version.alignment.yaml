@@ -1,0 +1,103 @@
+# Version Alignment - component version reference table
+# This is the source of truth the agent consults for any decision touching component versions.
+# Editing this file = changing the project's version anchors (handle with care).
+# Last verified: 2026-05-28
+
+doctrine_summary:
+  - "1. Default to the latest version."
+  - "2. Every component must be explicitly verified with --version; never rely on memory."
+  - "3. When a low version is anchored, the entire vertical stack must downgrade to match."
+  - "4. Verification failure = stop immediately + ASK_USER (mandatory, not a suggestion)."
+  - "Full rules in the 'Version Alignment Mandate' section of CLAUDE.md."
+
+# ----------------------------------------------------------------
+# Current latest stable versions (the target for rule 1)
+# New projects should copy this section by default.
+# ----------------------------------------------------------------
+current_latest:
+  zkverifyjs: "3.1.0"                # npm zkverifyjs, released 2026-05-19
+  kurier_service: "v1.30.0"          # api.kurier.xyz /version, 2026-05-28
+  kurier_api_spec: "v0.1.0"
+  nargo: "1.0.0-beta.14"             # current recommendation on docs.zkverify.io
+  bb: "v3.0.0"                       # current recommendation on docs.zkverify.io
+  bb_js: "v3.0.0"                    # @aztec/bb.js, tracks bb
+  noir_js: "1.0.0-beta.14"           # @noir-lang/noir_js, tracks nargo
+  node: ">= 24"                      # enforced since zkverifyjs 3.0.0
+  python: ">= 3.11"                  # required by claude-agent-sdk
+
+# ----------------------------------------------------------------
+# Project-level anchors (rule 3)
+# When a project anchors to a lower version, record why + how the
+# rest of the stack matches it.
+# ----------------------------------------------------------------
+project_anchors:
+
+  verifytrade:
+    anchor: "bb 0.84.0"
+    reason: "When the VerifyTrade demo was working, the UltraHonk verifier on zkVerify Volta supported the 0.84 series, and it was empirically verified end-to-end. Upgrading requires re-validating Volta runtime compatibility."
+    locked_stack:
+      bb: "0.84.0"
+      bb_js: "0.84.0"
+      nargo: "1.0.0-beta.6"
+      noir_js: "1.0.0-beta.6"
+      bb_compile_flags: ["--oracle_hash keccak"]
+      bb_js_runtime_flags: "{ keccak: true }"
+      zkverifyjs:
+        version: ">= 2.4.0"           # required for UltrahonkVariant support
+        ultrahonk_version: "V0_84"    # must be set explicitly; default since 3.1.0 is Legacy
+        ultrahonk_variant: "Plain"
+      tlsn_extension: "0.1.0.1500"
+      tlsn_verifier_server: "0.1.0.1500"
+    audit_action: "To upgrade bb to v3.0.0, you must first run a real end-to-end test on zkVerify Volta testnet with Ultrahonk V3_0. Only after that passes may this section be changed."
+
+# ----------------------------------------------------------------
+# Verification command list (rule 2)
+# Before generating related code, the agent must run these and paste
+# the output to compare against the target above.
+# ----------------------------------------------------------------
+verify_commands:
+  nargo: "nargo --version"
+  bb: "bb --version"
+  bb_js: "node -e \"console.log(require('@aztec/bb.js/package.json').version)\""
+  noir_js: "node -e \"console.log(require('@noir-lang/noir_js/package.json').version)\""
+  zkverifyjs: "node -e \"console.log(require('zkverifyjs/package.json').version)\""
+  node: "node --version"
+  python: "python3 --version"
+  npm: "npm --version"
+
+# ----------------------------------------------------------------
+# Standard response template when verification fails (rule 4)
+# When the agent detects a version mismatch, it MUST ASK_USER with
+# this template immediately. Do not continue generating code.
+# ----------------------------------------------------------------
+mismatch_prompt_template: |
+  Version alignment check FAILED - paused, waiting for your decision.
+
+  Component: <name>
+  Actual version detected: <actual>
+  Expected version (per knowledgebase/version.alignment.yaml): <expected>
+  Source section: <current_latest | project_anchors.verifytrade>
+
+  Impact: Continuing to generate code will most likely produce
+  "deserialize / format / byte length" style errors, and the logs
+  will not directly say the root cause is a version mismatch.
+
+  Your options:
+   (a) Upgrade <name> to <expected>, then I continue
+   (b) Edit knowledgebase/version.alignment.yaml to anchor at <actual> and downgrade the rest of the stack to match
+   (c) Skip the check (NOT recommended, high failure rate)
+
+  Which one?
+
+# ----------------------------------------------------------------
+# Historical lessons (why these rules are hard-pinned)
+# ----------------------------------------------------------------
+historical_cases:
+  verifytrade_one_day_debug:
+    summary: "VerifyTrade one-day debugging session: roughly half the time was spent on Noir/bb/bb.js version mismatches"
+    symptoms_misread_as_other_bugs:
+      - "msgpack format error -> real cause: bb / bb.js version mismatch"
+      - "vk hash mismatch -> real cause: bb compiled without --oracle_hash keccak"
+      - "on-chain verify returned false -> real cause: wrong UltrahonkVersion"
+      - "invalid format marker -> real cause: nargo / noir_js minor versions out of sync"
+    reference: "knowledgebase/cases/verifytrade/verifytrade.debug-retro.yaml Part 8/9"

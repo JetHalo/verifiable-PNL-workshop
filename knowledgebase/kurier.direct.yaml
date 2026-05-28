@@ -1,0 +1,69 @@
+# Kurier Direct Pattern
+# Direct submission mode branch template
+
+mode:
+  name: kurier-direct
+  kurier_submissionMode: direct
+  uses_kurier: true
+  uses_aggregation_tuple: false
+  uses_proof_aggregation_endpoint: false
+
+when_to_use:
+  - "Kurier direct mode is explicitly selected."
+  - "Target chain supports direct proof submission/verification route for selected proof type."
+  - "Business contract gate is defined without aggregation tuple."
+
+hard_rules:
+  - "Do not use proof-aggregation endpoint."
+  - "Do not require aggregationDetails."
+  - "Do not call verifyProofAggregation unless direct route explicitly produces compatible aggregation evidence."
+  - "Do not share aggregation-kurier payload builder."
+
+required_docs_before_coding:
+  - "docs/<case>/submission-mode.md = kurier-direct"
+  - "docs/<case>/verification-route.md explaining direct target-chain gate"
+  - "docs/<case>/schema-decisions.md"
+
+submit_payload_rules:
+  required:
+    - proofType
+    - vkRegistered
+    - chainId
+    - submissionMode
+    - proofData.proof
+    - proofData.vk
+  submissionMode_value: direct
+  proof_type_dependent:
+    - proofOptions
+    - proofData.publicSignals
+
+status_gate:
+  required:
+    - "Kurier direct status contract documented"
+    - "raw status mapped to business gate"
+    - "target-chain tx/reference persisted"
+  raw_status_candidates:
+    - Submitted
+    - IncludedInBlock
+    - Finalized
+  note: "Exact direct finality semantics must be copied from current Kurier/direct docs before coding."
+
+api_routes:
+  submit_proof: required
+  proof_status: required
+  proof_aggregation: forbidden
+
+common_mistakes:
+  - "Leaving aggregation tuple code in direct branch."
+  - "Assuming Kurier Finalized equals business finalized."
+  - "Using chainId but not submissionMode direct."
+  - "Not defining direct contract gate."
+
+validation_checklist:
+  - mode_locked_to_kurier_direct
+  - direct_payload_builder_separate
+  - no_proof_aggregation_route_gate
+  - no_aggregation_tuple_required
+  - direct_business_gate_documented
+  - raw_status_and_tx_reference_persisted
+

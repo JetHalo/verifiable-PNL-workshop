@@ -1,0 +1,111 @@
+# VerifyTrade debug history - distilled
+# Source: the 12 Parts of the VerifyTrade one-day debug retro distilled into an error -> fix table
+# (All the essential information from the original 1939-line retro doc has been compressed into the `errors` section.)
+
+usage: |
+  When the agent hits any of the symptoms / error messages below, jump straight to the matching
+  entry's fix instead of guessing from model memory.
+  This yaml is self-contained for all the essential fixes - no external doc lookup needed.
+
+errors:
+
+  # --- TLSNotary deployment ---
+  tlsn_image_not_found:
+    symptom: "ghcr.io/tlsnotary/tlsn/notary-server:v0.1.0-alpha.XX not found"
+    root_cause: "PSE stopped publishing prebuilt notary-server images after alpha.12"
+    fix: "Do not use notary-server. Build tlsn-verifier-server (alpha.15) from source instead."
+    refs: [verifytrade.architecture.yaml, "verifytrade.debug-retro.yaml (this file)"]
+
+  tlsn_crates_notary_missing:
+    symptom: "Fetching tlsn repo alpha.13+, crates/notary/server does not exist"
+    root_cause: "In alpha.13, PSE deleted the entire crates/notary/ directory from the monorepo (pivoted to the verifier model)"
+    fix: "Build from servers/verifier/ in the tlsn-extension repo (not the tlsn repo)"
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  mpc_setup_prover_timeout:
+    symptom: "setupProver times out, MPC handshake deadlocks at accept()"
+    root_cause: "The MPC protocol needs dense small-frame round-trips; cloud edge proxies (Railway/Fly/CF) almost always apply Nagle/buffering"
+    fix: "Switch to Proxy mode (the verifier itself opens TLS to the target and forwards bytes). Keep MPC mode for self-hosted environments only."
+    refs: ["verifytrade.debug-retro.yaml (this file)", "verifytrade.debug-retro.yaml (this file)"]
+
+  # --- Binance API reverse engineering ---
+  binance_fapi_user_trades_wrong_path:
+    symptom: "fapi.binance.com/fapi/v1/userTrades does not return the PnL shown in the web UI"
+    root_cause: "Hitting the fapi API key path requires the user to do extra configuration, which violates the ZK-TLS premise"
+    fix: "Reverse-engineer the bapi.binance.com endpoints the web UI actually uses, and auth with the user's already-logged-in browser cookie"
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  binance_451_unavailable:
+    symptom: "Railway verifier calling binance.com returns HTTP 451 Unavailable For Legal Reasons"
+    root_cause: "Railway US IPs trip Binance's geo-restriction (binance.com does not allow US)"
+    fix: "Switch the Railway region to asia-southeast1 (Singapore). Fallbacks: europe-west, asia-east."
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  tlsn_reveal_wildcard_not_supported:
+    symptom: "tlsn reveal JSON path like $.data[*].pnl fails"
+    root_cause: "tlsn does not support JSON path wildcards (only concrete indices)"
+    fix: "Reveal the whole body and parse it on the browser side"
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  # --- Noir / bb / bb.js version alignment ---
+  noir_js_nargo_mismatch:
+    symptom: "noir_js prove throws 'invalid format marker' / 'unexpected byte length'"
+    root_cause: "nargo version does not match noir_js, so ACIR deserialization fails"
+    fix: "Pin nargo 1.0.0-beta.6 + @noir-lang/noir_js 1.0.0-beta.6 in strict lockstep"
+    refs: ["verifytrade.debug-retro.yaml (this file)", verifytrade.architecture.yaml]
+
+  bb_js_msgpack_mismatch:
+    symptom: "bb.js generateProof throws a msgpack format error"
+    root_cause: "bb CLI and bb.js versions disagree; their msgpack schemas are incompatible"
+    fix: "Pin bb 0.84.0 + @aztec/bb.js 0.84.0 (the anchor version zkVerify Volta supports)"
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  keccak_poseidon2_oracle_hash:
+    symptom: "Computed vk hash does not match the on-chain value"
+    root_cause: "bb was compiled without an explicit oracle_hash; the default differs from what zkVerify Volta expects"
+    fix: "Compile bb with --oracle_hash keccak, and call bb.js generateProof with { keccak: true }"
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  # --- zkVerify submission format ---
+  zkverify_proof_as_buffer:
+    symptom: "Proof submission fails / type mismatch on settlementUltrahonkPallet"
+    root_cause: "Proof passed as a Buffer (it should be a 0x-prefixed hex string)"
+    fix: "proof = '0x' + Buffer.from(proof).toString('hex')"
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  zkverify_public_signals_no_0x:
+    symptom: "publicSignals rejected, or verify returns false"
+    root_cause: "Some entries in the publicSignals array lack the 0x prefix"
+    fix: "Every publicSignal must start with 0x. Wrap with an ensureHex(s) helper."
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  zkverify_public_signals_not_padded:
+    symptom: "verify returns false even though the format looks right"
+    root_cause: "publicSignals were not padded to 32 bytes (need padStart(64, '0'))"
+    fix: "Every hex publicSignal must be padStart(64,'0') followed by the 0x prefix"
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  zkverify_ultrahonk_version_wrong:
+    symptom: "Submission fails with 'unsupported version', or native verify panics"
+    root_cause: "Wrong UltrahonkVersion enum (V0_84 != V0_72 != V0_56)"
+    fix: "This project uses UltrahonkVersion.V0_84 + Variant.Plain (matches bb 0.84.0)"
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  zkverifyjs_attestation_renamed:
+    symptom: "transactionResult.attestationId is undefined"
+    root_cause: "zkverifyjs v3+ renamed attestationId to aggregationId"
+    fix: "Use await transactionResult.aggregationId, not attestationId"
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  # --- dApp routing / business logic ---
+  submit_picks_wrong_round:
+    symptom: "User clicks submit on /leaderboard/2 but the data lands in Round 3"
+    root_cause: "/submit autoselects the 'latest active round', which is decoupled from user context"
+    fix: "/submit must take an explicit ?round=N parameter; with no parameter, show a picker rather than silently falling back."
+    refs: ["verifytrade.debug-retro.yaml (this file)"]
+
+  sybil_dedup_blocks_demo:
+    symptom: "On stage, the second demo submission is rejected by the Sybil check"
+    root_cause: "Per-user cross-round dedup logic was too strict"
+    fix: "Before the talk, open 5 rounds in /admin and use a fresh round for each demo. For production, redesign the Sybil rules."
+    refs: ["verifytrade.debug-retro.yaml (this file)"]

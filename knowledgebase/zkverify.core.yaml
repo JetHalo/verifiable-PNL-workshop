@@ -1,0 +1,106 @@
+# zkVerify Core Specification
+# Machine-readable concepts for proof submission, statements, aggregation, and target-chain verification
+
+network:
+  name: zkVerify
+  purpose: "Dedicated blockchain for low-cost zero-knowledge proof verification."
+  role_in_architecture:
+    - receives_proof_submission
+    - validates_supported_proof_types
+    - emits_proof_verified_statement
+    - optionally_aggregates_statements_by_domain
+    - publishes_aggregation_receipts_for_target_chain_consumption
+
+proof_submission_flow:
+  direct_to_mainchain:
+    1_submit: "Submit proof via the appropriate verification pallet's submitProof extrinsic."
+    2_statement: "If valid, a ProofVerified event includes the statement value."
+    3_failure_fees: "Failing transactions can still be included and paid for to prevent DoS."
+
+  via_kurier:
+    1_client: "Browser generates proof and public inputs."
+    2_backend: "Server validates bindings and relays proof to Kurier."
+    3_kurier: "Kurier optimistically verifies and submits to zkVerify."
+    4_status: "Backend polls Kurier job-status."
+    5_consume: "Base contract consumes finalized or aggregated proof evidence."
+
+statement:
+  official_formula: "leaf_digest = keccak256(keccak256(verifier_ctx), hash(vk), version_hash(proof), keccak256(public_inputs_bytes))"
+  required_verifier_definitions:
+    - verifier_ctx
+    - vk_hash_method
+    - proof_version_hash_method
+    - public_inputs_bytes_extraction
+  local_rule: "Document exact public input ordering, encoding, and byte order before implementation."
+  parity_requirement:
+    - "local statement if computed"
+    - "Kurier status statement"
+    - "aggregationDetails.leaf"
+
+aggregation:
+  domain_separated:
+    domainId: "zkVerify aggregation domain id, not businessDomain."
+    new_proof_event: "Aggregate::NewProof includes statement, domainId, aggregationId."
+    complete_event: "Aggregate::AggregationComplete can be emitted when aggregation is complete."
+    receipt_event: "Aggregate::NewAggregationReceipt includes domainId and aggregationId."
+  statement_path:
+    rpc: "aggregate_statementPath"
+    inputs:
+      - "block where NewAggregationReceipt was emitted"
+      - domain_id
+      - aggregation_id
+      - statement
+    output: "Merkle path for submitted statement"
+
+supported_verifier_pallets:
+  examples:
+    - risc0
+    - groth16
+    - ultraplonk
+    - plonky2
+    - sp1
+    - ultrahonk
+    - ezkl
+    - tee
+
+target_chain_contract:
+  storage:
+    proofsAggregations: "mapping(uint256 domainId => mapping(uint256 aggregationId => bytes32 root))"
+  operator_methods:
+    submitAggregation: "Relayer/operator stores a root for domainId + aggregationId."
+    submitAggregationBatchByDomainId: "Batch stores multiple aggregation roots for one domain."
+  proof_submitter_method:
+    verifyProofAggregation:
+      args:
+        - _domainId
+        - _aggregationId
+        - _leaf
+        - _merklePath
+        - _leafCount
+        - _index
+      returns: bool
+      checks:
+        - "aggregation root exists"
+        - "Merkle.verifyProofKeccak(root, path, leafCount, index, leaf)"
+
+chain_action_pattern:
+  rule: "Business contracts must call or reference verifier precheck before executing mint/vote/release/whitelist."
+  common_actions:
+    - mint
+    - vote
+    - release
+    - whitelist
+  must_also_check:
+    - antiReplay_unused
+    - userAddr_binding
+    - chainId_binding
+    - appId_businessDomain_binding
+    - timestamp_window
+
+common_mistakes:
+  - "Treating Kurier status text as final business gate."
+  - "Using businessDomain as aggregationDomainId."
+  - "Skipping statement/leaf parity."
+  - "Letting frontend call Kurier directly."
+  - "Prompting wallet before verifier contract precheck."
+

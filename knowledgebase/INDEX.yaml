@@ -1,0 +1,210 @@
+# zkVerify + Kurier Knowledge Base
+# Entry point for LLM agents
+
+purpose: |
+  Machine-optimized knowledge repository for designing and implementing
+  zkVerify + Kurier proof verification flows. Start here, then load files
+  based on task.
+
+# ============================================================================
+# CRITICAL: Load zkverify.invariants.yaml FIRST for any zkVerify/Kurier work.
+# It contains non-negotiable rules that constrain all designs.
+# ============================================================================
+
+# ============================================================================
+# KB tier layout (important - agents must understand this before querying):
+#
+#   knowledgebase/             <- OPERATIONAL  "protocol facts"
+#                          Should be read as the "current standard" on every startup.
+#                          Must be kept aligned with the latest docs.zkverify.io
+#                          architecture/overview content.
+#                          Schema / field / enum / API shape: this is the source
+#                          of truth.
+#
+#   knowledgebase/handbook/    <- cases / examples (zkVerify Handbook style)
+#                          Only consult when operational tier is insufficient.
+#                          example.* series - "how other people use it".
+#                          May lag slightly behind the current SDK.
+#
+#   knowledgebase/cases/       <- project-level case studies
+#                          Concrete pitfalls + architecture + version locks
+#                          from real projects.
+#                          Currently: cases/verifytrade/ (Binance x TLSN x Noir x zkVerify)
+#                          High priority: when your project shares the same stack,
+#                          reuse these lessons directly.
+#
+# Query priority (high to low):
+#   1. operational (knowledgebase/*.yaml) - protocol-level facts
+#   2. cases/<current-project>/* - pitfalls from the project you are working on
+#   3. handbook/example.* - generic examples
+# ============================================================================
+
+# Freshness / drift status (last reviewed)
+#
+# operational tier:  2026-05-28 partial refresh (proof.systems.yaml + zkverifyjs.sdk.yaml)
+#                    2026-04-23 baseline for other 19 files (verified current 2026-05-28)
+# cases tier:        2026-05-28 (VerifyTrade one-day retro)
+# handbook tier:     2026-04-23 captured, no longer actively maintained
+freshness:
+  operational_last_pulled: "2026-04-23"
+  operational_last_verified: "2026-05-28"
+  operational_files_refreshed_2026_05_28:
+    - proof.systems.yaml      # ultrahonk version field + tee variant + bb v3.0.0
+    - zkverifyjs.sdk.yaml     # 2.3 -> 3.1 surface
+  operational_files_minor_drift_2026_05_28:
+    - INDEX.yaml              # this section
+    - kurier.api.yaml         # serviceVersion 1.26.1 -> 1.30.0, new runtimeSpecVersion field
+    - runbook.local.yaml      # node version tie to zkverifyjs 3.0.0 requirement
+    - zkverifyjs.non_aggregation.yaml  # execute() now takes domainId at top-level
+  zkverifyjs_version_when_pulled_baseline: "2.3.0"
+  zkverifyjs_version_current: "3.1.0"
+  zkverifyjs_breaking_releases_since_baseline: ["3.0.0"]
+  kurier_serviceVersion_when_pulled_baseline: "v1.26.1"
+  kurier_serviceVersion_current: "v1.30.0"
+  notes:
+    - "fflonk is in current docs.zkverify.io supported_proofs AND in Kurier /status mainnet+testnet."
+    - "tee is in docs.zkverify.io supported_proofs and Kurier OpenAPI enum, but NOT in live Kurier /status supportedProofs (mainnet+testnet) as of 2026-05-28."
+    - "risc0 V3_0 is in zkverifyjs enum but not on docs.zkverify.io supported_proofs page yet."
+    - "ultrahonk requires explicit version field since zkverifyjs 3.1.0; Legacy default preserves pre-versioning statement hash."
+  refresh_report: "see knowledgebase/REFRESH-REPORT.md for full diff + unverified items"
+
+files_by_category:
+  core_rules:
+    zkverify.invariants.yaml: "NON-NEGOTIABLE constraints - LOAD FIRST"
+    version.alignment.yaml: "MANDATORY version checks before any code gen (4 doctrine rules)"
+    security.boundaries.yaml: "browser-only proving, server-only secrets, anti-replay"
+    trust.model.yaml: "what Kurier/zkVerify/Base/UI can and cannot be trusted for"
+    schema.bindings.yaml: "binding fields, businessDomain vs aggregationDomainId split"
+
+  specifications:
+    zkverify.core.yaml: "zkVerify proof submission, statement, aggregation, verifier contract concepts"
+    kurier.api.yaml: "Kurier REST API endpoints, payload contracts, service versions"
+    kurier.status.yaml: "raw status values, normalized UI status, job response fields"
+    proof.systems.yaml: "supported proof systems, proofOptions, public input limits"
+    proof.statement.yaml: "statement/leaf digest semantics and parity checks"
+    base.contract.verification.yaml: "Base L2 verifier contract gate and business action consumption"
+    zkverifyjs.sdk.yaml: "non-aggregation direct zkVerifyJS SDK usage and lifecycle"
+
+  architecture_patterns:
+    tlsnotary.yaml: "TLSNotary protocol facts, deployment reference, official doc URLs (ZK-TLS layer)"
+    browser.proving.yaml: "witness/proof generation in browser only"
+    proof.aggregation.yaml: "aggregation-kurier route, tuple handling, precheck"
+    kurier.direct.yaml: "kurier-direct route and no-aggregation-tuple contract"
+    zkverifyjs.non_aggregation.yaml: "SDK non-aggregation route and status gate"
+    indexer.strategy.yaml: "thegraph/sqlite/hybrid strategies and fallback rules"
+
+  operations:
+    runbook.local.yaml: "local-to-testnet operational runbook"
+    env.schema.yaml: "environment variable layers and secret placement"
+    troubleshooting.yaml: "symptom -> root cause -> shortest check"
+    execution.plan.yaml: "stage-gated implementation plan"
+    acceptance.criteria.yaml: "end-to-end completion gates"
+
+  handbook_examples:  # in knowledgebase/handbook/, reference only
+    handbook/example.aggregation_kurier.yaml: "recommended attestation + aggregation + Base precheck flow"
+    handbook/example.kurier_direct.yaml: "Kurier direct mode branch template"
+    handbook/example.zkverifyjs_non_aggregation.yaml: "zkVerifyJS SDK non-aggregation branch template"
+
+  project_cases:  # in knowledgebase/cases/, reuse directly when the current project matches
+    cases/verifytrade/verifytrade.architecture.yaml: "VerifyTrade final architecture + version locks (Binance x TLSN x Noir x zkVerify Volta)"
+    cases/verifytrade/verifytrade.debug-retro.yaml: "VerifyTrade one-day debug retro: 16 errors -> fixes"
+
+task_routing:
+  new_zkverify_case:
+    load:
+      - zkverify.invariants.yaml
+      - execution.plan.yaml
+      - schema.bindings.yaml
+      - security.boundaries.yaml
+    then: "ask and lock submission mode + indexer strategy before implementation"
+
+  writing_kurier_api_routes:
+    load:
+      - zkverify.invariants.yaml
+      - kurier.api.yaml
+      - kurier.status.yaml
+      - schema.bindings.yaml
+      - security.boundaries.yaml
+    required_outputs:
+      - "pages/api/submit-proof.ts"
+      - "pages/api/proof-status.ts"
+      - "pages/api/proof-aggregation.ts if aggregation-kurier"
+
+  designing_proof_schema:
+    load:
+      - zkverify.invariants.yaml
+      - schema.bindings.yaml
+      - proof.statement.yaml
+      - proof.systems.yaml
+      - browser.proving.yaml
+
+  aggregation_flow:
+    load:
+      - proof.aggregation.yaml
+      - kurier.status.yaml
+      - base.contract.verification.yaml
+      - proof.statement.yaml
+
+  direct_kurier_flow:
+    load:
+      - kurier.direct.yaml
+      - kurier.api.yaml
+      - kurier.status.yaml
+      - base.contract.verification.yaml
+
+  zkverifyjs_flow:
+    load:
+      - zkverifyjs.non_aggregation.yaml
+      - zkverifyjs.sdk.yaml
+      - proof.systems.yaml
+
+  indexer_design:
+    load:
+      - indexer.strategy.yaml
+      - env.schema.yaml
+      - troubleshooting.yaml
+
+  runbook_or_debugging:
+    load:
+      - runbook.local.yaml
+      - troubleshooting.yaml
+      - kurier.status.yaml
+      - env.schema.yaml
+
+  verifytrade_case_lookup:
+    load:
+      - cases/verifytrade/verifytrade.architecture.yaml
+      - cases/verifytrade/verifytrade.debug-retro.yaml
+      - zkverify.invariants.yaml
+
+critical_doctrines:
+  - "Proving is browser-only: server never receives witness or private inputs."
+  - "Kurier API key is server-only: never use NEXT_PUBLIC_KURIER_API_KEY."
+  - "Lock one submission mode per branch: aggregation-kurier OR kurier-direct OR zkverifyjs-non-aggregation."
+  - "Lock one indexer strategy per case: thegraph OR sqlite OR hybrid."
+  - "Do not mix aggregation tuple logic into direct or non-aggregation modes."
+  - "businessDomain and aggregationDomainId are different fields and must never share one DOMAIN variable."
+  - "Kurier text status is progress; Base contract precheck is the aggregation business gate."
+  - "Aggregation mode must verify statement == leaf before contract precheck."
+  - "Wallet prompt is blocked until route-specific precheck passes."
+  - "No mock proofs in acceptance flows."
+  - "Bind businessDomain, appId, userAddr, chainId, timestamp, and antiReplay token."
+  - "Enforce anti-replay on server and contract with nullifier OR nonce OR orderId."
+  - "Use incremental indexing; never scan from genesis on each request."
+
+known_source_docs:
+  official:
+    zkverify_docs: "https://docs.zkverify.io/"
+    zkverify_architecture: "https://docs.zkverify.io/architecture/"
+    zkverify_overview: "https://docs.zkverify.io/overview/"
+    zkverify_handbook: "https://docs.zkverify.io/handbook/"  # cases only, not an operational source of truth
+    kurier_mainnet_docs: "https://kurier.xyz/docs/"
+    zkverifyjs_npm: "https://www.npmjs.com/package/zkverifyjs"
+    zkverifyjs_github: "https://github.com/zkVerify/zkverifyjs"
+    kurier_mainnet_swagger_json: "https://api.kurier.xyz/docs/json"
+    kurier_testnet_docs: "https://testnet.kurier.xyz/docs/"
+    zkverify_kurier_guide: "https://docs.zkverify.io/overview/getting-started/kurier"
+    zkverify_proof_submission_flow: "https://docs.zkverify.io/architecture/proof-submission-interface"
+    zkverifyjs_reference: "https://docs.zkverify.io/overview/zkverifyjs"
+    zkverify_smart_contract: "https://docs.zkverify.io/architecture/proof-verification-smart-contract"
+

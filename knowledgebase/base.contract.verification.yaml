@@ -1,0 +1,122 @@
+# Base Contract Verification
+# Target-chain verification gate and business action consumption
+
+overview:
+  target_chain: "Base L2 or Base Sepolia for tutorial"
+  purpose: "Consume zkVerify proof evidence before executing a business action."
+  common_actions:
+    - mint
+    - vote
+    - release
+    - whitelist
+
+networks:
+  mainnet:
+    Base:
+      chain_id: 8453
+      kurier_mainnet_supported: true
+  testnet:
+    Base_Sepolia:
+      chain_id: 84532
+      kurier_testnet_attestation_supported: true
+      kurier_testnet_direct_supported: true
+
+zkverify_verifier_contract:
+  storage:
+    proofsAggregations: "mapping(uint256 => mapping(uint256 => bytes32))"
+  read_method:
+    verifyProofAggregation:
+      signature: "verifyProofAggregation(uint256,uint256,bytes32,bytes32[],uint256,uint256) returns (bool)"
+      args:
+        _domainId: "aggregationDomainId"
+        _aggregationId: "aggregationId"
+        _leaf: "leaf"
+        _merklePath: "merklePath"
+        _leafCount: "leafCount"
+        _index: "index"
+      returns: bool
+      meaning: "True if the leaf is included in the stored aggregation root."
+
+business_contract_pattern:
+  finalize_function:
+    required_inputs:
+      - userAddr
+      - businessDomain
+      - appId
+      - chainId
+      - timestamp
+      - antiReplayToken
+      - aggregationDomainId
+      - aggregationId
+      - leaf
+      - merklePath
+      - leafCount
+      - index
+      - businessActionPayload
+    required_checks:
+      - "block.chainid == chainId"
+      - "antiReplayToken unused"
+      - "msg.sender == userAddr OR valid signature from userAddr"
+      - "businessDomain/appId/action payload match proof-bound statement"
+      - "verifyProofAggregation(...) == true"
+      - "timestamp within accepted window if freshness required"
+    effects:
+      - "mark antiReplayToken used"
+      - "execute business action"
+      - "emit event with userAddr, antiReplayToken, job/proof reference if available"
+
+frontend_precheck:
+  rule: "Call verifier contract read-only before prompting wallet."
+  aggregation_mode_args:
+    - aggregationDomainId
+    - aggregationId
+    - leaf
+    - merklePath
+    - leafCount
+    - index
+  must_also_check:
+    - statement_equals_leaf
+    - tuple_complete
+    - target_chain_matches_wallet_chain
+  if_false:
+    - do_not_prompt_wallet
+    - show_precheck_snapshot
+
+events:
+  recommended_business_events:
+    ProofConsumed:
+      fields:
+        - userAddr
+        - antiReplayToken
+        - aggregationDomainId
+        - aggregationId
+        - leaf
+        - actionType
+    ActionFinalized:
+      fields:
+        - userAddr
+        - actionId
+        - txHash_indexed
+
+direct_mode_note:
+  rule: "Do not reuse aggregation precheck for kurier-direct unless direct mode explicitly returns compatible evidence."
+  required_before_implementation:
+    - "document direct attestation contract path"
+    - "document direct status fields"
+    - "document target-chain verifier contract/API"
+
+common_mistakes:
+  - "Checking Kurier status in frontend and skipping contract verification."
+  - "Using aggregationDomainId from businessDomain env var."
+  - "Forgetting to mark nullifier used."
+  - "Not rechecking precheck inside finalize transaction."
+  - "Letting users sign on wrong chain."
+
+validation_checklist:
+  - precheck_before_wallet
+  - contract_rechecks_precheck
+  - chainId_checked
+  - antiReplay_checked_and_marked
+  - userAddr_binding_checked
+  - event_emitted_for_indexer
+

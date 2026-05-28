@@ -1,0 +1,169 @@
+# Schema Bindings
+# Shared field names and data contracts across UI, API, circuits, and contracts
+
+field_naming:
+  rule: "Use explicit field names and keep semantics separate."
+  forbidden:
+    - DOMAIN
+    - domain
+    - domainId_when_meaning_business_domain
+  required_split:
+    businessDomain:
+      type: string
+      meaning: "Business/app domain included in proof binding."
+    aggregationDomainId:
+      type: uint256|string
+      meaning: "zkVerify aggregation domain id used by aggregation pallet/verifier contract."
+
+proof_submit_request:
+  verificationMode:
+    type: enum
+    values: [aggregation-kurier, kurier-direct, zkverifyjs-non-aggregation]
+    required: true
+  proofType:
+    type: enum
+    values: [groth16, fflonk, plonky2, risc0, sp1, ultrahonk, ultraplonk, ezkl, tee]
+    required: true
+  proofOptions:
+    type: object
+    required: proof_type_dependent
+  proofData:
+    type: object
+    required: true
+    fields:
+      proof: "object|string required"
+      publicSignals: "object|array|string proof-type-dependent"
+      vk: "object|string required"
+  bindings:
+    type: object
+    required: true
+    fields:
+      businessDomain: "string required"
+      appId: "string required"
+      userAddr: "evm_address required"
+      chainId: "uint256 required"
+      timestamp: "uint64_unix_seconds required"
+      nullifier: "bytes32|string one-of antiReplay"
+      nonce: "bytes32|string|uint256 one-of antiReplay"
+      orderId: "bytes32|string one-of antiReplay"
+
+kurier_submit_payload:
+  proofType: "enum required"
+  proofOptions: "object proof-type-dependent"
+  chainId: "number required for aggregation-kurier or kurier-direct"
+  vkRegistered: "boolean required"
+  submissionMode:
+    type: enum
+    values: [attestation, direct]
+    required: false
+    notes:
+      - "Kurier OpenAPI marks submissionMode optional."
+      - "Official attestation tutorial omits it."
+      - "Use direct only when kurier-direct is explicitly locked."
+  proofData:
+    proof: "object|string required"
+    publicSignals: "object|array|string proof-type-dependent"
+    vk: "object|string required"
+
+proof_status_response:
+  proofId: string
+  jobId: string
+  normalizedStatus: "pending|verified|aggregated|failed"
+  rawStatus: string
+  source: "kurier|zkverifyjs"
+  proofType: "string|null"
+  chainId: "number|null"
+  txHash: "string|null"
+  txExplorerUrl: "string|null"
+  blockHash: "string|null"
+  blockExplorerUrl: "string|null"
+  aggregationId: "number|null"
+  statement: "string|null"
+  errorDetails: "object|null"
+  availableKeys: "string[]"
+  raw: object
+
+proof_aggregation_tuple:
+  proofId: string
+  jobId: string
+  aggregationDomainId: "uint256|string"
+  aggregationId: "uint256|string"
+  statement: bytes32
+  receipt: bytes32
+  receiptBlockHash: bytes32
+  root: bytes32
+  leaf: bytes32
+  leafCount:
+    source: "aggregationDetails.numberOfLeaves"
+    type: "uint256|string"
+  index:
+    source: "aggregationDetails.leafIndex"
+    type: "uint256|string"
+  merklePath:
+    source: "aggregationDetails.merkleProof"
+    type: "bytes32[]"
+
+circuit_inputs:
+  privateInputs:
+    location: browser_only
+    examples:
+      - rawCredential
+      - privateSalt
+      - privateScoreData
+  publicInputs:
+    type: ordered_array
+    fields:
+      1_businessDomainHash: "field|bytes32"
+      2_appIdHash: "field|bytes32"
+      3_userAddr: "field|bytes20"
+      4_chainId: "field|uint256"
+      5_timestamp: "field|uint64"
+      6_antiReplay: "field|bytes32"
+      7_businessClaimHash: "field|bytes32"
+  encoding_decisions_required:
+    - publicInputsEncoding
+    - publicInputsByteOrder
+    - hashAlgorithm
+    - addressNormalization
+
+finalize_args_aggregation:
+  userAddr: evm_address
+  businessDomain: "string|bytes32"
+  appId: "string|bytes32"
+  chainId: uint256
+  timestamp: uint64
+  antiReplayToken: bytes32
+  aggregationDomainId: uint256
+  aggregationId: uint256
+  leaf: bytes32
+  merklePath: "bytes32[]"
+  leafCount: uint256
+  index: uint256
+  businessActionPayload: "bytes|struct"
+
+precheck_snapshot:
+  proofId: string
+  jobId: string
+  verificationMode: enum
+  aggregationDomainId: "uint256|string"
+  aggregationId: "uint256|string"
+  statement: bytes32
+  leaf: bytes32
+  statementEqualsLeaf: boolean
+  precheck: boolean
+  contractAddress: evm_address
+  chainId: uint256
+  checkedAt: iso_datetime
+  rawTuple: object
+  diagnostics: object
+
+validation_checklist:
+  - explicit_field_names
+  - businessDomain_not_domain
+  - aggregationDomainId_not_businessDomain
+  - antiReplay_present
+  - verificationMode_present
+  - public_input_order_documented
+  - byte_order_documented
+  - precheck_snapshot_available
+

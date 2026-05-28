@@ -1,0 +1,160 @@
+# Workshop Deliverable - acceptance boundary
+#
+# This yaml tells the agent: a complete VerifyTrade starter project should
+# contain these 8 component categories, what each one's "done" criterion is,
+# and which invariants must hold.
+#
+# Note: this is the **boundary (scope + acceptance gates)**, NOT a file-by-file spec.
+# The agent decides the concrete file layout, as long as each component passes
+# its must_pass commands and satisfies its key_invariants.
+
+purpose: |
+  Listener clones this workshop directory -> enters a prompt ->
+  the agent generates a VerifyTrade-style ZK-TLS PnL project from scratch with
+  the 8 component categories. Running scripts/e2e-mock-test.sh successfully
+  counts as success.
+
+target_architecture: |
+  TLSNotary captures a Binance Futures bapi trade-history attestation
+   -> Noir UltraHonk circuit asserts PnL > threshold (using realizedProfit;
+      the circuit does NOT recompute PnL)
+   -> zkverifyjs 3.1 submits to zkVerify, returns aggregationId
+   -> A Solidity Competition contract on Base Sepolia consumes the attestation
+      and runs the leaderboard
+   -> A Next.js dApp coordinates the flow (with JSON-file storage in place of a
+      standalone DB)
+
+# ----------------------------------------------------------------
+# Backend architecture clarification (do not spin up a separate DB)
+# ----------------------------------------------------------------
+backend_clarification: |
+  This demo project has two kinds of "backend":
+  (1) TLSN verifier server - Rust, deployed to Railway, one-off configuration. See component #7.
+  (2) Data storage - NOT a standalone DB. It is JSON-file storage built into the frontend
+      (lib/storage.ts + data/state.json + atomic write + in-process mutex).
+      This is a deliberate simplification for the demo; swap in a real DB in production.
+
+# ----------------------------------------------------------------
+# 8 component categories - boundary + acceptance
+# ----------------------------------------------------------------
+components:
+
+  circuit:
+    intent: "Noir UltraHonk circuit asserting attested realizedProfit > threshold, with Poseidon binding the context"
+    must_pass:
+      - "nargo check"
+      - "nargo test (at least 1 Poseidon byte-alignment test)"
+    key_invariants:
+      - "Poseidon implementation is byte-for-byte aligned with the Rust prover"
+      - "bb compiled with --oracle_hash keccak"
+      - "Trust the attested realizedProfit; do NOT recompute PnL inside the circuit"
+      - "Anchor versions: see knowledgebase/version.alignment.yaml.project_anchors.verifytrade"
+
+  prover:
+    intent: "Rust CLI, MPC-TLS or Proxy mode, shells out to local nargo/bb to produce an on-chain-submittable proof"
+    must_pass:
+      - "cargo build --release"
+      - "cargo test --release"
+    key_invariants:
+      - "Supports a mock mode (end-to-end runs without a real TLSN backend)"
+      - "Poseidon implementation aligned with the circuit"
+      - "Shells out to nargo + bb; does NOT reimplement UltraHonk in Rust"
+
+  contracts:
+    intent: "Solidity Competition contract (zkVerify cross-chain attestor interface + Mock + Foundry tests + deploy script)"
+    must_pass:
+      - "forge build"
+      - "forge test"
+    key_invariants:
+      - "Anti-replay: nullifier or nonce"
+      - "claim must only succeed after verifyProofAggregation(...) passes"
+      - "claim must emit an event (for the indexer to consume)"
+      - "Ships a MockZkVerify for tests"
+
+  scripts:
+    intent: "TypeScript ops scripts (zkverifyjs submission / local verify / round creation / mock data / leaderboard reads / e2e tests)"
+    must_pass:
+      - "pnpm install --ignore-scripts"
+      - "tsc --noEmit"
+      - "bash e2e-mock-test.sh ends with 'E2E MOCK PIPELINE PASSED'"
+    key_invariants:
+      - "zkverifyjs submission must avoid the 4 hard pitfalls (see .claude/skills/wire-zkverify-submission)"
+      - "Ultrahonk calls must set version: V0_84 explicitly (matches the bb 0.84.0 anchor)"
+      - "Read aggregationId off transactionResult, NOT attestationId"
+
+  frontend:
+    intent: |
+      Next.js 14 dApp - UI pages + API routes + lib layer + JSON-file storage.
+      This single component also acts as the demo's "data backend" (no standalone DB).
+    must_pass:
+      - "pnpm install --ignore-scripts"
+      - "tsc --noEmit"
+      - "next build"
+    key_invariants:
+      - "At minimum 5 page categories: home + submit + rounds + leaderboard + admin"
+      - "At minimum 4 API route categories: list/create round + single-round CRUD + submit proof + read leaderboard"
+      - "Required lib-layer capabilities: server-side zkverifyjs wrapper / browser-side Poseidon / browser proving / TLSN bridge / file storage / wagmi config"
+      - "Storage rules: JSON file + in-process mutex + write-to-tmp + rename for atomic flush (replaces a real DB)"
+      - "Sybil check code is commented out (intentionally off for the workshop demo); uncomment in production"
+      - "Browser-only proving / server-only seed phrase (see security.boundaries.yaml)"
+      - "Wallet via RainbowKit + wagmi; /admin is owner-gated"
+
+  plugin:
+    intent: "TLSNotary Chrome extension plugin that wraps the notarize flow for Binance bapi trade-history"
+    must_pass:
+      - "pnpm install + tsc --noEmit + esbuild produces dist/"
+    key_invariants:
+      - "config.json: declares cookies/headers/requests covering binance.com + bapi/.../trade-history POST"
+      - "host functions: redirect + notarize"
+      - "steps[] has at least 3 steps (log into binance / capture session / trigger notarize)"
+      - "TLSN extension compatible version: see knowledgebase/version.alignment + knowledgebase/tlsnotary.yaml"
+
+  notary_server:
+    intent: "Railway one-click deploy bundle (the Rust source itself is not in the workshop repo; this directory holds the deploy artifact only)"
+    must_pass:
+      - "Dockerfile syntax is valid"
+      - "railway.toml is valid TOML"
+      - "generate-keys.sh is valid bash"
+    key_invariants:
+      - "Dockerfile builds tlsn-verifier-server from a locked tag of the tlsn-extension repo"
+      - "Region must be asia-southeast1 (Singapore) - Binance geo-restrictions"
+      - "config has listen port 7047 + required verifier settings"
+      - "Ships generate-keys.sh to produce the signing key"
+    listener_action: "After receiving the bundle, the listener uses Railway's one-click 'Deploy to Railway' to bring up their own verifier."
+
+  docs:
+    intent: "Project README + architecture diagram + developer guide"
+    must_pass:
+      - "Markdown is valid"
+      - "README includes a Quick Start section + the e2e-mock-test command"
+    key_invariants:
+      - "README opens with a one-paragraph statement of what the project does"
+      - "At least one architecture diagram or a textual description covering the full data flow"
+
+# ----------------------------------------------------------------
+# Acceptance (the condition under which the agent may declare 'done')
+# ----------------------------------------------------------------
+acceptance:
+  agent_declares_done_when_all_true:
+    - "All 8 component directories exist"
+    - "Every component's must_pass command exits 0"
+    - "scripts/e2e-mock-test.sh's final line is 'E2E MOCK PIPELINE PASSED'"
+    - "The agent prints a summary: per-component file counts + evidence each must_pass passed"
+
+  on_failure:
+    - "If the same must_pass command fails twice, stop and ASK_USER per the CLAUDE.md failure-loop hard constraint"
+    - "Do NOT pass off a mock proof as a real proof"
+    - "Do NOT delete tests or comment out assertions just to make must_pass pass"
+
+# ----------------------------------------------------------------
+# Cross-references (concrete constraints live in other files; not duplicated here)
+# ----------------------------------------------------------------
+see_also:
+  version_locks: "knowledgebase/version.alignment.yaml"
+  zkverifyjs_4_pitfalls: ".claude/skills/wire-zkverify-submission/SKILL.md"
+  circuit_specifics: ".claude/skills/build-pnl-circuit/SKILL.md"
+  knowledge_query_skill: ".claude/skills/lookup-zkverify/SKILL.md"
+  security_model: "knowledgebase/security.boundaries.yaml"
+  invariants: "knowledgebase/zkverify.invariants.yaml"
+  tlsn_protocol: "knowledgebase/tlsnotary.yaml"
+  pnl_data_source: "Binance bapi realizedProfit (already specified in CLAUDE.md 'project discipline' section)"

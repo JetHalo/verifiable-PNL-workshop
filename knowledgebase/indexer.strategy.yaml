@@ -1,0 +1,120 @@
+# Indexer Strategy
+# thegraph / sqlite / hybrid history and fallback design
+
+purpose:
+  - "Read proof jobs and business contract history without browser full-chain scans."
+  - "Provide deterministic query fallback."
+  - "Avoid repeated eth_getLogs block range failures."
+
+strategy_lock:
+  required_before_coding: true
+  allowed:
+    - thegraph
+    - sqlite
+    - hybrid
+  docs_file: "docs/<case>/indexer-strategy.md"
+
+sqlite:
+  use_when:
+    - local_tutorial
+    - small_dev_deployment
+    - quick_iteration
+  tables:
+    proof_jobs:
+      primary_key: jobId
+      fields:
+        - proofId
+        - userAddr
+        - rawStatus
+        - normalizedStatus
+        - txHash
+        - blockHash
+        - createdAt
+        - updatedAt
+    aggregation_tuples:
+      primary_key: jobId
+      fields:
+        - aggregationId
+        - statement
+        - leaf
+        - leafIndex
+        - numberOfLeaves
+        - merkleProofJson
+        - receipt
+        - receiptBlockHash
+    contract_actions:
+      primary_key: txHash
+      fields:
+        - userAddr
+        - antiReplayToken
+        - actionType
+        - blockNumber
+        - status
+    sync_state:
+      primary_key: scope
+      fields:
+        - lastSyncedBlock
+  sync_rule: "Start from deployment block; then sync lastSyncedBlock + 1."
+  forbidden:
+    - "scan from genesis on each request"
+    - "browser-side event history scan"
+
+thegraph:
+  use_when:
+    - production_read_model
+    - many_users
+    - public_history_queries
+  requirements:
+    - subgraph_for_business_contract_events
+    - lag_monitoring
+    - fallback_policy
+  should_index_events:
+    - ProofConsumed
+    - ActionFinalized
+    - NullifierUsed
+  fallback:
+    if_lagging: "use sqlite cache or bounded RPC"
+
+hybrid:
+  use_when:
+    - production_recommended
+    - need_fast_reads_and_local_job_cache
+  priority:
+    1_primary: thegraph
+    2_cache: sqlite
+    3_bounded_fallback: rpc
+  cutover_rules:
+    graph_healthy: "read The Graph"
+    graph_lag_above_threshold: "read SQLite for recent locally-observed jobs"
+    missing_recent_tx: "bounded RPC from last known block, not genesis"
+
+health_checks:
+  graph_lag:
+    input:
+      - latest_chain_block
+      - latest_indexed_block
+    alert_if_blocks_behind: 50
+  sqlite_sync:
+    input:
+      - lastSyncedBlock
+      - latest_chain_block
+    alert_if_stale_seconds: 120
+  rpc_errors:
+    watch:
+      - eth_getLogs_range_error
+      - rate_limit_429
+
+common_mistakes:
+  - "Frontend scans all events."
+  - "SQLite rescans from block 0."
+  - "No deployBlock config."
+  - "No graph lag fallback."
+  - "Indexer status used as authorization gate."
+
+validation_checklist:
+  - strategy_locked
+  - deploy_block_recorded
+  - lastSyncedBlock_persisted
+  - no_browser_full_chain_scan
+  - fallback_behavior_documented
+

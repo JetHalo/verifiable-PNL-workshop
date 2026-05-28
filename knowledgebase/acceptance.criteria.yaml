@@ -1,0 +1,65 @@
+# Acceptance Criteria
+# End-to-end gates for completion
+
+functional:
+  proof_generation:
+    - "User can generate a real proof in browser."
+    - "No witness/private input leaves browser."
+    - "Proof and public inputs match selected proofType."
+
+  kurier_submission:
+    - "Backend submits to Kurier with server-only API key."
+    - "Response includes jobId."
+    - "optimisticVerify is success before polling continues."
+
+  status_tracking:
+    - "proof-status route maps raw status to normalized UI status."
+    - "rawStatus and availableKeys are preserved."
+    - "Failed status returns errorDetails."
+
+  aggregation_mode:
+    required_if: aggregation-kurier
+    criteria:
+      - "Submit payload includes chainId."
+      - "proof-aggregation route returns complete tuple."
+      - "statement == leaf."
+      - "verifyProofAggregation(...) returns true before wallet prompt."
+
+  direct_mode:
+    required_if: kurier-direct
+    criteria:
+      - "submissionMode direct payload is used."
+      - "No aggregation tuple is required."
+      - "Direct business gate is documented and enforced."
+
+  zkverifyjs_mode:
+    required_if: zkverifyjs-non-aggregation
+    criteria:
+      - "No Kurier route is used."
+      - "SDK events and transactionResult are persisted."
+      - "No proof-aggregation gate is used."
+
+  contract_action:
+    - "Business action succeeds only after selected proof gate."
+    - "Anti-replay token cannot be used twice."
+    - "Contract emits event for indexer."
+
+security:
+  - "KURIER_API_KEY is not public."
+  - "No NEXT_PUBLIC_KURIER_API_KEY exists."
+  - "Server logs contain no witness/private inputs."
+  - "businessDomain and aggregationDomainId are separate."
+  - "userAddr, chainId, timestamp, appId are bound."
+
+operations:
+  - "runbook exists."
+  - "troubleshooting matrix exists."
+  - "indexer strategy locked."
+  - "no browser full-chain scan."
+  - "fallback behavior documented."
+
+definition_of_done:
+  all_required_for_selected_mode_pass: true
+  no_mock_proofs: true
+  docs_updated_with_decision_locks: true
+

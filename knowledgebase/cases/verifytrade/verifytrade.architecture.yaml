@@ -1,0 +1,74 @@
+# VerifyTrade final architecture + version locks
+# Source: VerifyTrade one-day debug retro (architecture + version-lock sections)
+
+architecture:
+  flow:
+    - "1. The browser dApp (Next.js) invokes the TLSNotary extension"
+    - "2. The TLSN extension talks to the Railway verifier over WSS and runs the Proxy protocol"
+    - "3. The verifier itself opens TLS to www.binance.com (Proxy mode) and forwards bytes"
+    - "4. Once the attestation is back, the browser generates a proof in Noir UltraHonk"
+    - "5. The backend calls settlementUltrahonkPallet.submitProof via zkverifyjs"
+    - "6. zkVerify Volta verifies + aggregates natively, finalizes, and returns an aggregationId"
+    - "7. The aggregationId is written to the leaderboard"
+
+  components:
+    browser:
+      - "Next.js dApp - frontend/app/submit"
+      - "TLSNotary extension 0.1.0.1500 (alpha.15)"
+      - "Noir UltraHonk prover (WASM, in-browser)"
+      - "bb.js 0.84.0 - generateProof({keccak:true})"
+    backend:
+      - "Next.js API route - frontend/app/api/rounds/[id]/submit/route.ts"
+      - "lib/zkverify-server.ts - calls zkVerifyJS"
+    verifier_railway:
+      url_template: "https://<your-app>.up.railway.app"
+      region: "asia-southeast1 (Singapore)  # see lesson #5"
+      build: "Dockerfile builds tlsn-verifier-server from source"
+      tlsn_ext_ref: "0.1.0.1500"
+      port: 7047
+      endpoints: ["/session", "/verifier", "/proxy", "/health"]
+    chain:
+      network: "zkVerify Volta testnet"
+      pallet: "settlementUltrahonkPallet"
+      output: "aggregationId"
+
+# --- Version locks: any mismatch causes on-chain verify to fail ---
+version_lock:
+  tlsnotary_extension:
+    version: "0.1.0.1500"
+    source: "Chrome Web Store"
+  tlsn_verifier_server:
+    version: "0.1.0.1500 (= alpha.15)"
+    source: "tlsn-extension repo, built from source"
+    notes: "After alpha.12 PSE stopped publishing prebuilt images; from alpha.13 onward the entire crates/notary directory was removed."
+  nargo:
+    version: "1.0.0-beta.6"
+    source: "noirup"
+  bb:
+    version: "0.84.0"
+    source: "bbup"
+    notes: "Project anchor version (chosen because of zkVerify Volta support range)"
+  noir_js:
+    version: "1.0.0-beta.6"
+    source: "npm @noir-lang/noir_js"
+  bb_js:
+    version: "0.84.0"
+    source: "npm @aztec/bb.js"
+  zkverifyjs:
+    version: "^3.1.0"
+    source: "npm"
+  bb_compile_flags:
+    required: ["--oracle_hash keccak"]
+    optional: ["--zk  # if ZK flavor is needed"]
+  bb_js_runtime_flags:
+    generate_proof: "{ keccak: true }"
+
+# Real production demo data (the output captured when the end-to-end flow was working)
+production_proof_of_life:
+  round: 3
+  user: "jet"
+  trades: 42
+  volume_usdt: 1798.19
+  pnl_usdt: -4.42
+  attestation_id: "0xe033fe..."
+  comment: "Real ZEN/USDT live-trading data; every number is pinned to the same Poseidon commitment."

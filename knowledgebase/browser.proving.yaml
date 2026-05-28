@@ -1,0 +1,96 @@
+# Browser Proving Pattern
+# Witness and proof generation stay in the browser/user client
+
+purpose:
+  - "Protect private inputs."
+  - "Keep backend as relay/status service."
+  - "Make proof payload safe to submit to Kurier."
+
+flow:
+  1_load_artifacts:
+    browser_loads:
+      - circuit_wasm_or_acvm_artifact
+      - proving_key_if_needed
+      - public_vk_or_vkHash_reference
+  2_collect_inputs:
+    private_inputs:
+      - rawCredential
+      - rawBusinessSecret
+      - privateSalt
+    public_bindings:
+      - businessDomain
+      - appId
+      - userAddr
+      - chainId
+      - timestamp
+      - antiReplay
+  3_build_public_inputs:
+    rule: "Use deterministic schema.bindings.yaml order."
+  4_generate_witness:
+    location: browser
+    forbidden: server
+  5_generate_proof:
+    location: browser
+    output:
+      - proof
+      - publicSignals
+  6_submit_to_backend:
+    sends:
+      - proof
+      - publicSignals
+      - vk_or_vkHash
+      - bindings
+    does_not_send:
+      - witness
+      - private_inputs
+
+ui_states:
+  idle: "input form ready"
+  proving: "witness/proof generation running"
+  submit_ready: "proof generated and bindings validated"
+  pending: "backend submitted to Kurier"
+  failed: "proving or submission failed"
+
+artifact_guidance:
+  noir:
+    recommended_for_new_cases:
+      - ultrahonk
+      - ultraplonk
+    caution:
+      - "artifact formats differ by proof type"
+      - "public inputs count/encoding must match Kurier proofOptions"
+  circom:
+    proof_type: groth16
+    caution:
+      - "snarkjs curve/library must match proofOptions"
+
+privacy_checks:
+  network_tab:
+    must_not_contain:
+      - witness
+      - private_inputs
+      - raw secrets
+  logs:
+    must_not_contain:
+      - witness
+      - private_inputs
+  backend_request:
+    allowed_only:
+      - proof
+      - publicSignals
+      - vk_or_vkHash
+      - bindings
+
+common_mistakes:
+  - "Generating witness in API route for convenience."
+  - "Logging input object before splitting private/public."
+  - "Sending raw credential to server for hash computation."
+  - "Letting public input order differ between browser and docs."
+
+validation_checklist:
+  - browser_generates_witness
+  - browser_generates_proof
+  - server_receives_no_private_inputs
+  - public_inputs_match_schema_order
+  - proofData_matches_selected_proof_type
+

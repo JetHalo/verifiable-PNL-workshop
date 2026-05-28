@@ -1,0 +1,119 @@
+# TLSNotary - protocol-level facts + official documentation URLs
+# Operational-tier entry - the agent consults this for ANY ZK-TLS project (not just VerifyTrade).
+# Last verified: 2026-05-28
+
+what_it_is: |
+  TLSNotary is a ZK-TLS protocol that turns the contents of "an HTTPS session the user
+  is already logged into" into "a signed attestation any third party can verify". The
+  user does not hand over passwords, API keys, or cookies to anyone; they just log into
+  the target site (Binance / Coinbase / Twitter ...) in their browser as usual. The
+  TLSNotary extension participates in the TLS handshake inside the browser and produces
+  an attestation of "I observed that this site returned XXX".
+
+current_architecture_model_2026_05:
+  active_repo: tlsn-extension
+  active_binary: tlsn-verifier-server
+  port: 7047
+  endpoints: ["/session", "/verifier", "/proxy", "/health"]
+  mode_recommended: Proxy
+  mode_legacy: MPC                 # almost never works on the cloud; see deprecated_paths
+
+# ----------------------------------------------------------------
+# Critical historical context (avoid repeating VerifyTrade's bad day)
+# ----------------------------------------------------------------
+historical_pivots:
+  alpha_12_to_15:
+    summary: "In alpha.13, PSE deleted the entire crates/notary/server directory from the tlsn repo and moved it to servers/verifier/ in the tlsn-extension repo."
+    impact: "Projects using the old notary-server must migrate to verifier-server - this is a different model, not the same binary."
+    detail_ref: "cases/verifytrade/verifytrade.debug-retro.yaml#tlsn_image_not_found"
+  notary_to_verifier_model_change:
+    old: "notary signed attestations offline"
+    new: "verifier participates in the MPC session online and produces a presentation"
+    pse_announcement: "alpha.11 release notes mentioned in passing 'dropped support for notary-server'"
+
+deprecated_paths:
+  ghcr_notary_image:
+    path: "ghcr.io/tlsnotary/tlsn/notary-server:v0.1.0-alpha.12+"
+    status: "no longer published, do not use"
+    fix: "build tlsn-verifier-server from source"
+  mpc_mode_on_cloud_edge:
+    path: "MPC mode running on Railway / Fly / Cloudflare edge proxies"
+    status: "deadlocks almost every time (Nagle / buffering)"
+    fix: "switch to Proxy mode and let the verifier itself open TLS to the target server and forward bytes"
+
+# ----------------------------------------------------------------
+# Deployment reference (Proxy mode + Railway)
+# ----------------------------------------------------------------
+deployment_reference:
+  rust_build:
+    base_image: "rust:latest (builder) + debian:bookworm-slim (runtime)"
+    clone: "git clone --depth=1 --branch ${TLSN_EXT_REF} https://github.com/tlsnotary/tlsn-extension.git"
+    cargo: "cargo build --release --bin tlsn-verifier-server"
+    detail_ref: "cases/verifytrade/verifytrade.debug-retro.yaml"
+  region_choice:
+    rule: "Verifier region must match the regions the target server permits."
+    examples:
+      binance_com: "asia-southeast1 (Singapore)  # US IPs get a hard 451"
+      binance_us: "us-east"
+  logs_must_be_trace:
+    setting: "RUST_LOG=warn,tlsn=trace,tlsn_core=trace,mpc_tls=trace,tlsn_verifier_server=debug"
+    why: "info level does not surface MPC accept() deadlock internal state"
+
+# ----------------------------------------------------------------
+# Constraints (know before writing code)
+# ----------------------------------------------------------------
+constraints:
+  reveal_json_path:
+    rule: "tlsn does not support JSON path wildcards (no $.data[*].pnl style selectors)"
+    workaround: "reveal the whole body and parse on the browser side"
+  approval_popup:
+    rule: "If the approval popup in the extension sidebar is not clicked within 60 seconds, the session is rejected."
+    impact: "When running a live demo, remember to click Approve, or the session dies on its own."
+  cookie_session_dependency:
+    rule: "The extension captures the currently active session in the user's browser (cookie / csrftoken / fvideo-token etc.)."
+    impact: "The user must already be logged into the target site in their browser for this to run."
+
+# ----------------------------------------------------------------
+# Official documentation + source repos (consult these when the local KB does not have it)
+# ----------------------------------------------------------------
+official_sources:
+  protocol_intro:
+    url: "https://tlsnotary.org/"
+    when: "Read when you want to understand what problem TLSNotary is actually solving."
+  github_main_repo:
+    url: "https://github.com/tlsnotary/tlsn"
+    note: "alpha.13+ no longer contains notary-server"
+  github_extension_repo:
+    url: "https://github.com/tlsnotary/tlsn-extension"
+    note: "Houses both the live verifier-server source and the browser extension source"
+  chrome_extension:
+    url: "https://chromewebstore.google.com/detail/tlsnotary-extension/<id>"
+    pinned_version_for_workshop: "0.1.0.1500"
+  release_notes:
+    url: "https://github.com/tlsnotary/tlsn-extension/releases"
+    when: "Mandatory reading before any version alignment work (per version.alignment.yaml rule 2)"
+  rust_doc:
+    url: "https://docs.rs/tlsn-core/latest/tlsn_core/"
+    when: "When writing a reveal handler / custom verifier"
+
+# ----------------------------------------------------------------
+# Direct link to project-level pitfalls
+# ----------------------------------------------------------------
+project_case_index:
+  verifytrade:
+    architecture: "knowledgebase/cases/verifytrade/verifytrade.architecture.yaml"
+    debug_history: "knowledgebase/cases/verifytrade/verifytrade.debug-retro.yaml"
+    full_retro_distilled_here: "see cases/verifytrade/verifytrade.debug-retro.yaml (Parts 1-3 are fully distilled into the yaml)"
+    relevant_parts: ["Part 1: notary -> verifier", "Part 2: MPC deadlock", "Part 3: Proxy mode", "Part 5: reveal limit"]
+
+# ----------------------------------------------------------------
+# When to load this file
+# ----------------------------------------------------------------
+when_to_load:
+  - "User asks what TLSNotary is or how it works"
+  - "Before starting any ZK-TLS project (not limited to VerifyTrade)"
+  - "When deploying the verifier on Railway / Fly"
+  - "When checking that the TLSN extension version and verifier server version are aligned"
+when_NOT_enough:
+  - "Want to know how VerifyTrade specifically reverse-engineered Binance bapi -> go to cases/verifytrade/"
+  - "Want to understand how Noir / bb consume the attestation -> proof.systems.yaml + cases/verifytrade/"

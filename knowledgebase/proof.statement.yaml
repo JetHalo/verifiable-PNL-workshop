@@ -1,0 +1,110 @@
+# Proof Statement Contract
+# Canonical statement/leaf semantics and parity checks
+
+purpose:
+  - "Prevent statement mismatch between circuit, Kurier, zkVerify, and Base contract."
+  - "Define exactly what is hashed and in which order."
+  - "Make aggregation tuple debugging deterministic."
+
+official_formula:
+  leaf_digest: "keccak256(keccak256(verifier_ctx), hash(vk), version_hash(proof), keccak256(public_inputs_bytes))"
+
+required_verifier_definitions:
+  verifier_ctx:
+    description: "Unique byte sequence for proof verifier context."
+    status: proof_type_dependent
+  hash_vk:
+    description: "How verification key is hashed."
+    status: proof_type_dependent
+  version_hash:
+    description: "How proof/verifier version contributes to statement."
+    status: proof_type_dependent
+  public_inputs_bytes:
+    description: "How public inputs are converted to bytes."
+    status: case_specific_must_document
+
+case_statement_contract:
+  statementAlgorithm:
+    name: "zkverify-leaf-digest"
+    version: "v1"
+  publicInputs:
+    ordered_fields:
+      - businessDomainHash
+      - appIdHash
+      - userAddr
+      - chainId
+      - timestamp
+      - antiReplay
+      - businessClaimHash
+  decisions_required_before_coding:
+    - hashAlgorithm_for_businessDomainHash
+    - hashAlgorithm_for_appIdHash
+    - address_normalization
+    - field_modulus_conversion
+    - endian_rule
+    - hex_or_decimal_canonical_format
+
+parity_checks:
+  local_vs_kurier:
+    check: "local_statement == kurier_status.statement"
+    when: "if local statement calculator exists"
+  kurier_vs_tuple:
+    check: "kurier_status.statement == aggregationDetails.leaf"
+    required_for: aggregation-kurier
+  tuple_vs_contract:
+    check: "verifyProofAggregation(domainId, aggregationId, leaf, path, leafCount, index) == true"
+    required_for: aggregation-kurier
+
+precheck_snapshot:
+  required_fields:
+    - proofId
+    - jobId
+    - verificationMode
+    - aggregationDomainId
+    - aggregationId
+    - statement
+    - leaf
+    - statementEqualsLeaf
+    - precheck
+    - contractAddress
+    - chainId
+    - checkedAt
+    - rawTuple
+    - diagnostics
+  purpose: "Record exact values used in failed precheck debugging."
+
+failure_modes:
+  statement_leaf_mismatch:
+    likely_causes:
+      - public_input_order_wrong
+      - byte_order_wrong
+      - proofType_or_vkHash_mismatch
+      - using_old_vkHash_after_circuit_rebuild
+      - hex_decimal_mixed
+    response:
+      - stop_wallet_prompt
+      - show_diagnostic_keys
+      - rerun_statement_parity_script
+
+  contract_precheck_false:
+    likely_causes:
+      - wrong_aggregationDomainId
+      - wrong_aggregationId
+      - wrong_leaf
+      - merklePath_order_wrong
+      - leafCount_index_mapped_wrong
+      - aggregation_not_published_to_destination_chain
+    response:
+      - compare_tuple_fields
+      - check_aggregationPublished
+      - call_verifier_contract_read_only
+
+validation_checklist:
+  - statement_algorithm_named_and_versioned
+  - public_input_order_fixed
+  - byte_order_fixed
+  - encoding_fixed
+  - businessDomain_appId_userAddr_chainId_timestamp_antireplay_bound
+  - statement_equals_leaf_checked
+  - precheck_snapshot_saved_on_failure
+

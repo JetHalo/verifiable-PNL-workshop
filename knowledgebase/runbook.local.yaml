@@ -1,0 +1,111 @@
+# Local/Testnet Runbook
+# Ordered operation from setup to proof to chain action
+
+prerequisites:
+  node: "Node >= 24 required (zkverifyjs 3.0.0 raised engines.node from >=18 to >=24). Kurier tutorial recommends v24.1.0."
+  package_manager: "npm/pnpm based on repo."
+  wallet: "MetaMask or compatible EVM wallet."
+  kurier_account: "Kurier API key for selected environment."
+  chain_funds: "Testnet funds on selected destination chain."
+  proof_artifacts:
+    - circuit_artifact
+    - proving_key_if_needed
+    - verification_key
+
+ordered_steps:
+  1_lock_decisions:
+    actions:
+      - choose_submission_mode
+      - choose_indexer_strategy
+      - choose_target_chain
+      - choose_proof_type
+    outputs:
+      - docs/<case>/submission-mode.md
+      - docs/<case>/indexer-strategy.md
+
+  2_configure_env:
+    actions:
+      - write_apps_web_env_local
+      - write_contracts_env
+      - confirm_no_public_kurier_key
+
+  3_check_kurier:
+    commands:
+      - "curl \"$KURIER_API_BASE_URL/version\""
+      - "curl \"$KURIER_API_BASE_URL/status\""
+    expected:
+      - status_ok
+      - proofType_supported
+
+  4_register_vk:
+    action: "POST /register-vk/{apiKey} unless vkHash already known."
+    output:
+      - vkHash
+
+  5_start_web:
+    command: "npm run dev"
+    expected:
+      - app_loads
+      - wallet_connects
+
+  6_browser_prove:
+    action: "Generate witness and proof in browser."
+    verify:
+      - no_witness_sent_to_server
+      - public_inputs_match_schema
+
+  7_submit_proof:
+    route: "POST /api/submit-proof"
+    expected:
+      - jobId
+      - optimisticVerify_success
+
+  8_poll_status:
+    route: "GET /api/proof-status"
+    aggregation_mode_wait_for:
+      - Aggregated
+      - AggregationPublished
+    non_aggregation_wait_for:
+      - Finalized
+
+  9_aggregation_tuple:
+    only_for: aggregation-kurier
+    route: "GET /api/proof-aggregation"
+    checks:
+      - tuple_complete
+      - statement_equals_leaf
+
+  10_contract_precheck:
+    only_for: aggregation-kurier
+    check: "verifyProofAggregation(...) == true"
+
+  11_finalize_business_action:
+    action: "User signs transaction."
+    contract_checks:
+      - antiReplay_unused
+      - proof_gate_true
+      - chainId_matches
+      - user_binding_matches
+
+  12_index_history:
+    action: "Indexer syncs final action event."
+    check:
+      - no_full_chain_scan
+      - lastSyncedBlock_updated
+
+troubleshooting_priority:
+  1: "Submission mode / route mismatch"
+  2: "Env layer mismatch"
+  3: "Statement / encoding / byte order mismatch"
+  4: "Gateway precheck / aggregation tuple"
+  5: "Wallet signature / transaction send"
+
+done_when:
+  - real_proof_generated
+  - no_private_inputs_leave_browser
+  - kurier_job_successful
+  - route_specific_gate_passes
+  - business_contract_action_succeeds
+  - replay_attempt_fails
+  - indexer_reads_final_event
+

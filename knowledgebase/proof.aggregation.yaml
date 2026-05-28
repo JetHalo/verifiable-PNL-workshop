@@ -1,0 +1,109 @@
+# Proof Aggregation Pattern
+# aggregation-kurier route and Base contract precheck
+
+mode:
+  name: aggregation-kurier
+  kurier_submissionMode: attestation
+  requires_chainId: true
+  uses_kurier: true
+  uses_zkverifyjs_sdk: false
+  uses_proof_aggregation_endpoint: true
+
+when_to_use:
+  - "Need target-chain smart contract to verify proof inclusion through zkVerify aggregation."
+  - "Need Base L2 business action gated by zkVerify proof."
+  - "Want Kurier to handle REST relay and aggregation status."
+
+architecture:
+  browser:
+    - generate_proof
+    - submit_to_backend
+  backend:
+    - validate_bindings
+    - submit_to_kurier_with_chainId
+    - poll_job_status
+    - expose_proof_aggregation_tuple
+  kurier:
+    - optimistic_verify
+    - submit_to_zkverify
+    - wait_for_aggregation
+    - return_aggregationDetails
+  base_contract:
+    - verifyProofAggregation
+    - enforce_anti_replay
+    - execute_business_action
+
+required_routes:
+  submit_proof: "apps/web/pages/api/submit-proof.ts"
+  proof_status: "apps/web/pages/api/proof-status.ts"
+  proof_aggregation: "apps/web/pages/api/proof-aggregation.ts"
+
+submit_payload_rules:
+  required:
+    - proofType
+    - vkRegistered
+    - chainId
+    - proofData.proof
+    - proofData.vk
+  proof_type_dependent:
+    - proofOptions
+    - proofData.publicSignals
+  forbidden:
+    - submissionMode_direct
+    - direct_mode_contract_fields
+    - zkverifyjs_transactionResult_as_status
+
+status_gate:
+  wait_for_raw:
+    - Aggregated
+    - AggregationPublished
+  required_tuple_fields:
+    - aggregationId
+    - statement
+    - aggregationDetails.receipt
+    - aggregationDetails.receiptBlockHash
+    - aggregationDetails.root
+    - aggregationDetails.leaf
+    - aggregationDetails.leafIndex
+    - aggregationDetails.numberOfLeaves
+    - aggregationDetails.merkleProof
+
+precheck:
+  steps:
+    1_tuple_complete: "Ensure all required tuple fields exist."
+    2_statement_parity: "Check statement == aggregationDetails.leaf."
+    3_contract_read: "Call verifyProofAggregation(...) on destination verifier contract."
+    4_wallet_gate: "Only enable business transaction if precheck true."
+  contract_args_mapping:
+    domainId: aggregationDomainId
+    aggregationId: aggregationId
+    leaf: aggregationDetails.leaf
+    merklePath: aggregationDetails.merkleProof
+    leafCount: aggregationDetails.numberOfLeaves
+    index: aggregationDetails.leafIndex
+
+diagnostic_response_on_missing_tuple:
+  error: missing_aggregation_tuple_fields
+  include:
+    - proofId
+    - jobId
+    - rawStatus
+    - availableKeys
+    - missingKeys
+    - raw
+
+common_mistakes:
+  - "Treating Aggregated as enough without contract precheck."
+  - "Using businessDomain as domainId."
+  - "Mapping leafIndex to leafCount by mistake."
+  - "Skipping statement == leaf."
+  - "Using direct mode submissionMode."
+
+validation_checklist:
+  - mode_locked_to_aggregation_kurier
+  - chainId_present_in_submit_payload
+  - proof_aggregation_route_exists
+  - tuple_fields_parsed
+  - statement_equals_leaf_checked
+  - verifyProofAggregation_true_before_wallet
+

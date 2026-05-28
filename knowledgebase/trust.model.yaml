@@ -1,0 +1,90 @@
+# Trust Model
+# What can and cannot be trusted in a zkVerify + Kurier flow
+
+browser:
+  trusted_for:
+    - "keeping user private inputs local if code is correct"
+    - "generating witness/proof with user consent"
+  not_trusted_for:
+    - "claiming proof is verified"
+    - "enforcing anti-replay alone"
+    - "hiding tampered public inputs"
+  required_controls:
+    - deterministic_public_input_builder
+    - user_visible_wallet_binding
+    - server_revalidation_of_bindings
+
+backend:
+  trusted_for:
+    - "holding Kurier API key"
+    - "normalizing statuses"
+    - "persisting job and anti-replay records"
+    - "proxying Kurier requests"
+  not_trusted_for:
+    - "seeing witness/private inputs"
+    - "declaring proof valid without zkVerify/Kurier evidence"
+    - "serving as only business gate"
+  required_controls:
+    - no_private_input_logging
+    - schema_validation
+    - response_raw_status_persistence
+    - diagnostic_errors
+
+kurier:
+  trusted_for:
+    - "proof relay"
+    - "optimistic verification result"
+    - "job status and aggregation details"
+    - "vk registration convenience"
+  not_trusted_for:
+    - "replacing contract-side verification"
+    - "business-domain authorization"
+  required_controls:
+    - keep_raw_response
+    - handle_status_variants
+    - verify_tuple_on_target_chain
+
+zkverify:
+  trusted_for:
+    - "proof verification result"
+    - "statement event"
+    - "aggregation receipt"
+  not_trusted_for:
+    - "knowing application business semantics unless included in public inputs"
+  required_controls:
+    - bind_business_fields_in_public_inputs
+    - statement_parity_checks
+
+base_contract:
+  trusted_for:
+    - "final business action"
+    - "anti-replay enforcement"
+    - "aggregation verification on target chain"
+  not_trusted_for:
+    - "checking private witness"
+    - "inferring missing app bindings"
+  required_controls:
+    - verifyProofAggregation_or_mode_gate
+    - nullifier_nonce_orderId_storage
+    - strict_args_validation
+
+indexer:
+  trusted_for:
+    - "query convenience"
+    - "history display"
+  not_trusted_for:
+    - "source of truth for finalization"
+    - "authorizing wallet action"
+  required_controls:
+    - incremental_sync
+    - lag_monitoring
+    - fallback_policy
+
+summary_table:
+  browser: "trusted for local proving only"
+  backend: "trusted for secret relay and persistence, not proof truth"
+  kurier: "trusted as relay/status provider, not final business gate"
+  zkverify: "trusted for proof verification/aggregation statements"
+  base_contract: "trusted for final business state"
+  indexer: "trusted for cache/query convenience only"
+

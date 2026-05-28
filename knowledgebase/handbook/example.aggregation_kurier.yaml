@@ -1,0 +1,76 @@
+# Example: Aggregation Kurier
+# Recommended attestation + aggregation + Base precheck flow
+
+metadata:
+  name: aggregation_kurier
+  recommended_for: "tutorial and Base L2 contract-gated actions"
+  submission_mode: aggregation-kurier
+  kurier_submissionMode: attestation
+  indexer_recommendation:
+    tutorial: sqlite
+    production: hybrid
+
+measurement:
+  one_sentence: "The app verifies that a browser-generated ZK proof for a user-bound business claim was aggregated by zkVerify and accepted by the Base verifier contract."
+  commodity_type: cryptographic_attestation
+  verification_method: "Kurier -> zkVerify -> aggregation tuple -> Base verifyProofAggregation"
+
+flow:
+  1_browser:
+    - build_public_inputs
+    - generate_witness
+    - generate_proof
+  2_backend_submit:
+    - validate_bindings
+    - enforce_server_antireplay_precheck
+    - submit_to_kurier_with_chainId
+  3_kurier_zkverify:
+    - optimisticVerify_success
+    - status_progresses
+    - Aggregated_or_AggregationPublished
+  4_tuple:
+    - parse_aggregationDetails
+    - statement_equals_leaf
+  5_contract:
+    - read_verifyProofAggregation
+    - prompt_wallet_if_true
+    - finalize_business_action
+  6_indexer:
+    - sync_event
+    - display_history
+
+required_env:
+  apps_web:
+    KURIER_API_BASE_URL: "https://api-testnet.kurier.xyz/api/v1"
+    KURIER_API_KEY: server_only
+    NEXT_PUBLIC_CHAIN_ID: 84532
+    NEXT_PUBLIC_BUSINESS_DOMAIN: "bt-zkverify-workshop"
+    NEXT_PUBLIC_APP_ID: "bt-zkverify-v1"
+    ZKVERIFY_AGGREGATION_DOMAIN_ID: "replace"
+    NEXT_PUBLIC_ZKVERIFY_VERIFIER_CONTRACT: "0x..."
+    NEXT_PUBLIC_BUSINESS_CONTRACT: "0x..."
+
+api_routes:
+  required:
+    - submit-proof
+    - proof-status
+    - proof-aggregation
+
+acceptance:
+  - chainId_in_submit_payload
+  - jobId_returned
+  - status_Aggregated
+  - tuple_complete
+  - statement_equals_leaf
+  - verifyProofAggregation_true
+  - business_action_success
+  - replay_rejected
+
+failure_examples:
+  missing_chainId:
+    symptom: "No aggregationDetails ever appears."
+    fix: "Add target chainId to Kurier submit payload."
+  wrong_domain:
+    symptom: "verifyProofAggregation false."
+    fix: "Use aggregationDomainId, not businessDomain."
+

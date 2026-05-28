@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "comment": "Context7 — gives agent live, version-specific docs for popular libraries (Noir, Circom, zkVerify SDK, etc.). Used when local knowledgebase doesn't cover a library or is stale."
+    }
+  }
+}

@@ -1,0 +1,150 @@
+# zkVerify + Kurier Invariants
+# Non-negotiable constraints that define valid project behavior
+
+architecture:
+  browser_only_proving:
+    rule: "All witness generation and proof generation happen in the browser or user-controlled client."
+    server_must_never_receive:
+      - witness
+      - private_inputs
+      - raw_credentials
+      - private_salt
+      - unredacted_secret_business_data
+    rationale:
+      - protects_user_privacy
+      - keeps_backend_as_relay_not_prover
+      - preserves_zk_security_boundary
+    violation_indicator:
+      - "API request contains witness"
+      - "server imports proving backend for user proof generation"
+      - "logs contain private inputs"
+
+  next_pages_router_api:
+    required_routes:
+      submit_proof: "apps/web/pages/api/submit-proof.ts"
+      proof_status: "apps/web/pages/api/proof-status.ts"
+      proof_aggregation: "apps/web/pages/api/proof-aggregation.ts only for aggregation-kurier"
+    rule: "Use server-side API routes to keep Kurier key private and normalize status."
+
+  submission_mode_lock:
+    rule: "One branch implements exactly one submission mode."
+    allowed_modes:
+      - aggregation-kurier
+      - kurier-direct
+      - zkverifyjs-non-aggregation
+    must_write_before_coding:
+      - "docs/<case>/submission-mode.md"
+      - "docs/<case>/verification-route.md"
+    violation_indicator:
+      - "Kurier direct payload and aggregation tuple parser in same branch"
+      - "proof-aggregation endpoint used by non-aggregation mode"
+      - "submissionMode inferred from previous conversation"
+
+  indexer_lock:
+    rule: "One case must explicitly lock one indexer strategy before implementation."
+    allowed:
+      - thegraph
+      - sqlite
+      - hybrid
+    must_write_before_coding:
+      - "docs/<case>/indexer-strategy.md"
+    rationale: "Commitment/history queries need deterministic source priority and fallback."
+
+security:
+  kurier_api_key:
+    rule: "Kurier API key is server-only."
+    allowed_locations:
+      - "apps/web/.env.local as KURIER_API_KEY"
+      - "server secret manager"
+    forbidden:
+      - "NEXT_PUBLIC_KURIER_API_KEY"
+      - "client bundle"
+      - "browser localStorage"
+      - "README pasted real key"
+    if_leaked:
+      - rotate_key_immediately
+      - remove_from_client_env
+      - audit_request_logs
+
+  binding_fields:
+    required:
+      - businessDomain
+      - appId
+      - userAddr
+      - chainId
+      - timestamp
+      - antiReplay
+    rule: "Proof payloads and public inputs must bind app identity, user address, chain, freshness, and replay protection."
+
+  anti_replay:
+    allowed:
+      - nullifier
+      - nonce
+      - orderId
+    enforcement:
+      server: "Reject duplicate token before proof relay when possible."
+      contract: "Reject duplicate token before business action."
+    rule: "At least one anti-replay field is mandatory."
+
+domains:
+  business_vs_aggregation:
+    rule: "businessDomain and aggregationDomainId are different fields with different semantics."
+    businessDomain:
+      meaning: "Business/app domain included in proof binding."
+      example: "bt-zkverify-workshop"
+    aggregationDomainId:
+      meaning: "zkVerify aggregation domain id used by aggregation pallet/verifier contract."
+      example: "42"
+    forbidden:
+      - "DOMAIN reused for both"
+      - "domainId used where businessDomain is expected"
+
+verification_gates:
+  aggregation_kurier:
+    informational:
+      - "Kurier raw status"
+    authoritative_before_wallet:
+      - "aggregation tuple exists"
+      - "statement == leaf"
+      - "verifyProofAggregation(...) == true"
+    rule: "Kurier text status alone cannot authorize business finalization."
+
+  kurier_direct:
+    rule: "Direct mode must define its own target-chain gate and must not require aggregation tuple."
+
+  zkverifyjs_non_aggregation:
+    rule: "SDK mode gates on zkVerifyJS included/finalized lifecycle and must not call proof-aggregation."
+
+ui:
+  required_statuses:
+    - pending
+    - verified
+    - aggregated
+    - failed
+  wallet_prompt:
+    rule: "Wallet transaction prompt is disabled until selected route gate passes."
+  no_mock_success:
+    rule: "UI must not simulate proof success in acceptance flows."
+
+allowed_roots:
+  rule: "Factory-style implementations should use these roots."
+  roots:
+    - apps/web
+    - circuits
+    - contracts
+    - docs
+    - scripts
+
+validation_checklist:
+  - browser_only_proving
+  - no_server_witness
+  - kurier_key_server_only
+  - one_submission_mode_locked
+  - one_indexer_strategy_locked
+  - businessDomain_aggregationDomainId_split
+  - binding_fields_present
+  - anti_replay_enforced
+  - status_ui_present
+  - selected_route_gate_before_wallet
+  - no_mock_proofs
+
