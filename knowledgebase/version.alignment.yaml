@@ -22,6 +22,8 @@ current_latest:
   bb: "v3.0.0"                       # current recommendation on docs.zkverify.io
   bb_js: "v3.0.0"                    # @aztec/bb.js, tracks bb
   noir_js: "1.0.0-beta.14"           # @noir-lang/noir_js, tracks nargo
+  tlsn_extension: "0.1.0.1500"       # alpha.15 series; see tlsnotary.yaml. Re-check github.com/tlsnotary/tlsn-extension/releases for newer before pinning.
+  tlsn_verifier_server: "0.1.0.1500" # build from tlsn-extension repo at the same tag
   node: ">= 24"                      # enforced since zkverifyjs 3.0.0
   python: ">= 3.11"                  # required by claude-agent-sdk
 

@@ -52,17 +52,24 @@ generate a complete ZK-TLS PnL verification project from scratch, with 8 compone
 circuit / prover / contracts / scripts / frontend / plugin / notary-server / docs.
 
 Goal: Use TLSNotary to capture the realizedProfit field from Binance bapi,
-use a Noir UltraHonk circuit to assert PnL > threshold, submit via zkverifyjs 3.1
+use a Noir UltraHonk circuit to assert PnL > threshold, submit via zkverifyjs
 to zkVerify Volta to obtain an aggregationId, have a Solidity contract on Base
 consume the attestation and maintain a leaderboard, coordinate the flow in a
 Next.js frontend, and persist data via a JSON file store
 (frontend/lib/storage.ts + frontend/data/state.json) instead of a separate DB.
 
+Version selection:
+- Default to the latest versions in the current_latest section of
+  knowledgebase/version.alignment.yaml (Rule ①).
+- If you want to strictly reproduce the original VerifyTrade demo, use
+  project_anchors.verifytrade instead.
+- Either way, run the verify_commands and stop + ASK_USER on any mismatch
+  (skipping this violates Rule ④ of the Version Lock Mandate in CLAUDE.md).
+- For components not listed in version.alignment.yaml, look them up via the
+  Context7 MCP or fetch the official release page.
+
 Strictly follow:
 - The version alignment mandate, 7 hard rules, and failure-loop constraint in CLAUDE.md
-- The version stack pinned in knowledgebase/version.alignment.yaml under
-  project_anchors.verifytrade (bb 0.84.0 / nargo 1.0.0-beta.6 / zkverifyjs 3.1.0 /
-  TLSN v0.1.0-alpha.12)
 - The key_invariants and must_pass for every component in
   knowledgebase/cases/verifytrade/workshop-deliverable.yaml
 
