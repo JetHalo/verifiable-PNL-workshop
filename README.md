@@ -47,35 +47,66 @@ python pnl_agent.py "<paste the prompt below>"
 Paste this into the command above and the agent will generate a complete VerifyTrade-style project from scratch:
 
 ```
-Based on this repo's CLAUDE.md and knowledgebase/cases/verifytrade/workshop-deliverable.yaml,
-generate a complete ZK-TLS PnL verification project from scratch, with 8 components:
-circuit / prover / contracts / scripts / frontend / plugin / notary-server / docs.
+Build me a "verifiable trading leaderboard" web app.
 
-Goal: Use TLSNotary to capture the realizedProfit field from Binance bapi,
-use a Noir UltraHonk circuit to assert PnL > threshold, submit via zkverifyjs
-to zkVerify Volta to obtain an aggregationId, have a Solidity contract on Base
-consume the attestation and maintain a leaderboard, coordinate the flow in a
-Next.js frontend, and persist data via a JSON file store
-(frontend/lib/storage.ts + frontend/data/state.json) instead of a separate DB.
+What users can do:
+- Place a few trades on Binance Futures Testnet, then use my Chrome extension
+  to "notarize" the trade history of the current session into a ZK-TLS
+  attestation (TLSNotary).
+- Use a Noir UltraHonk circuit to prove "my realizedProfit over this window
+  exceeds threshold X" - taking the realizedProfit field from the Binance
+  response as a private input, never revealing individual trades.
+- Submit the proof to zkVerify (Volta testnet) and wait for finalize to get
+  back an aggregationId.
+- The frontend immediately writes this submission (identity / tradeCount /
+  volume / pnl / aggregationId / blockHash / txHash) into state.json. The
+  current round's leaderboard updates, sorted by PnL descending.
+- The site is publicly accessible; anyone can view the leaderboard.
 
-Version selection:
-- Default to the latest versions in the current_latest section of
-  knowledgebase/version.alignment.yaml (Rule ①).
-- If you want to strictly reproduce the original VerifyTrade demo, use
-  project_anchors.verifytrade instead.
-- Either way, run the verify_commands and stop + ASK_USER on any mismatch
-  (skipping this violates Rule ④ of the Version Lock Mandate in CLAUDE.md).
-- For components not listed in version.alignment.yaml, look them up via the
-  Context7 MCP or fetch the official release page.
+The leaderboard data lives **in a JSON file on the frontend server**, **not on
+any chain**. zkVerify submission + receiving the aggregationId is the end of
+the on-chain path; no Solidity contract / Base / any EVM chain consumes the
+attestation. state.json is the source of truth.
 
-Strictly follow:
-- The version alignment mandate, 7 hard rules, and failure-loop constraint in CLAUDE.md
-- The key_invariants and must_pass for every component in
-  knowledgebase/cases/verifytrade/workshop-deliverable.yaml
+Please generate all 8 components:
+- circuit/        Noir circuit
+- prover/         Rust CLI (runs MPC-TLS or Proxy mode, assembles proof, shells
+                  out to bb)
+- contracts/      Solidity Competition contract + Foundry test.
+                  Note: this is a "ready-made reference implementation for a
+                  future on-chain version", **not part of the live demo path**.
+                  forge test must still pass, but the frontend does not call it.
+- scripts/        TypeScript ops scripts (zkverifyjs submit / mock data / e2e
+                  test)
+- frontend/       Next.js 14 dApp (home / submit / rounds / leaderboard /
+                  admin). Persistence uses a JSON file (lib/storage.ts +
+                  data/state.json); no separate DB; no contract calls — after
+                  submitting the proof to zkVerify and getting an
+                  aggregationId, call appendSubmission() to write state.json.
+- plugin/         TLSNotary Chrome extension (config.json declares the Binance
+                  bapi endpoint)
+- notary-server/  Railway one-click deploy package (Dockerfile + railway.toml
+                  + key-gen script)
+- docs/           README + architecture diagram + dev guide
 
-Once finished, run each component's must_pass commands plus
-scripts/e2e-mock-test.sh; it must print "E2E MOCK PIPELINE PASSED" on the last
-line before the deliverable is considered complete.
+Key pitfalls to avoid (CLAUDE.md and knowledgebase have the full list; the
+most-forgotten ones are):
+- Don't recompute PnL inside the circuit. Trust the realizedProfit from the
+  attestation.
+- Proof generation must be browser-only. The seed phrase must be server-only.
+- Lock versions to the current_latest section of
+  knowledgebase/version.alignment.yaml. Run verify_commands before generating
+  code; on a mismatch, stop and ask me.
+- The TLSNotary verifier must be deployed to region asia-southeast1 (Binance
+  enforces geo restrictions).
+- Writes to state.json must go through the mutex + atomic-rename path in
+  lib/storage.ts; do not let two concurrent POSTs call fs.writeFile directly.
+
+Done when:
+- Every component's own must_pass passes (nargo test / forge test / tsc
+  --noEmit / etc.).
+- Finally, scripts/e2e-mock-test.sh prints "E2E MOCK PIPELINE PASSED" on its
+  last line.
 ```
 
 Paste the whole block in one shot; the agent will run for 10–30 minutes and then all 8 components should be in place.
